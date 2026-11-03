@@ -16,6 +16,78 @@ import {
 } from '../components/reportContainerBuilder.js';
 import { config } from '../../config.js';
 
+/**
+ * Robust helper to extract a text input value from a modal submission,
+ * checking both discord.js helpers and recursively inspecting raw components
+ * (handling inputs wrapped inside ComponentType.LABEL 18).
+ */
+export function getModalInputValue(
+  interaction: ModalSubmitInteraction,
+  customId: string
+): string {
+  // 1. Try discord.js fields helper
+  try {
+    const val = interaction.fields.getTextInputValue(customId);
+    if (val) return val.trim();
+  } catch {
+    // Continue to raw inspection
+  }
+
+  // 2. Direct recursive search in raw interaction data
+  const rawComponents = (interaction as any).data?.components;
+  if (Array.isArray(rawComponents)) {
+    const findValue = (comps: any[]): string | undefined => {
+      for (const item of comps) {
+        if (item.custom_id === customId && typeof item.value === 'string') {
+          return item.value.trim();
+        }
+        if (item.component) {
+          const nested = findValue([item.component]);
+          if (nested !== undefined) return nested;
+        }
+        if (Array.isArray(item.components)) {
+          const nested = findValue(item.components);
+          if (nested !== undefined) return nested;
+        }
+      }
+      return undefined;
+    };
+
+    const found = findValue(rawComponents);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Extracts uploaded attachments from modal interaction payload.
+ */
+export function getModalAttachments(
+  interaction: ModalSubmitInteraction
+): AttachmentInput[] {
+  const attachments: AttachmentInput[] = [];
+  const rawData = (interaction as any).data;
+  const resolved = rawData?.resolved?.attachments;
+
+  if (resolved && typeof resolved === 'object') {
+    for (const [, att] of Object.entries(resolved) as [string, any][]) {
+      if (att && att.url && att.filename) {
+        attachments.push({
+          url: att.url,
+          filename: att.filename,
+          size: att.size,
+          contentType: att.content_type
+        });
+      }
+    }
+  }
+
+  return attachments;
+}
+
 export async function handleReportModalSubmit(
   interaction: ModalSubmitInteraction
 ): Promise<void> {
@@ -46,13 +118,8 @@ export async function handleReportModalSubmit(
     return;
   }
 
-  // 2. Extract and validate Reason input
-  let reason = '';
-  try {
-    reason = interaction.fields.getTextInputValue('verity:field:reason').trim();
-  } catch {
-    reason = '';
-  }
+  // 2. Extract and validate Reason input (handles Label wrapping)
+  const reason = getModalInputValue(interaction, 'verity:field:reason');
 
   if (!reason || reason.length < 15 || reason.length > 1000) {
     await interaction.editReply({
@@ -62,22 +129,7 @@ export async function handleReportModalSubmit(
   }
 
   // 3. Extract uploaded attachments from modal interaction payload
-  const attachmentsToValidate: AttachmentInput[] = [];
-  const rawData = (interaction as any).data;
-  const resolvedAttachments = rawData?.resolved?.attachments;
-
-  if (resolvedAttachments && typeof resolvedAttachments === 'object') {
-    for (const [id, att] of Object.entries(resolvedAttachments) as [string, any][]) {
-      if (att && att.url && att.filename) {
-        attachmentsToValidate.push({
-          url: att.url,
-          filename: att.filename,
-          size: att.size,
-          contentType: att.content_type
-        });
-      }
-    }
-  }
+  const attachmentsToValidate = getModalAttachments(interaction);
 
   // 4. In-memory validation (magic bytes, size check, SHA-256)
   let validatedFiles: ValidatedFile[] = [];
@@ -118,7 +170,7 @@ export async function handleReportModalSubmit(
 
   if (!reportsChannel) {
     await interaction.editReply({
-      content: `⚠️ Report \`${report.reportCode}\` created in database, but designated #reports channel is unconfigured or unreachable.`
+      content: `⚠️ Report \`${report.reportCode}\` recorded in database, but designated #reports channel is unconfigured or unreachable.`
     });
     return;
   }
@@ -146,11 +198,20 @@ export async function handleReportModalSubmit(
       files: discordFileAttachments
     });
   } catch (err: any) {
-    console.error('[Verity] Error sending report container to Discord:', err);
-    await interaction.editReply({
-      content: `❌ Failed to publish report to #reports channel: ${err.message}`
-    });
-    return;
+    console.warn('[Verity] Notice: Components V2 send failed, attempting clean fallback:', err?.message);
+    try {
+      // Fallback if guild lacks Components V2 rendering flags
+      reportMessage = await reportsChannel.send({
+        content: `### 🛡️ Report \`${report.reportCode}\` • Pending Investigation\n**Reported Member:** <@${report.reportedUserId}> (\`${report.reportedUserId}\`)\n**Reporter:** <@${report.reporterId}>\n**Channel:** <#${report.channelId}>\n**Message Link:** [Jump to Message](${report.messageLink})\n> **Alleged Reason:**\n> ${report.reason}${evidenceError ? `\n⚠️ **Evidence Notice:** ${evidenceError}` : ''}`,
+        files: discordFileAttachments
+      });
+    } catch (fallbackErr: any) {
+      console.error('[Verity] Error sending report to Discord:', fallbackErr);
+      await interaction.editReply({
+        content: `❌ Failed to publish report to #reports channel: ${fallbackErr.message}`
+      });
+      return;
+    }
   }
 
   // 9. Record evidence metadata from newly re-uploaded Discord message attachments
@@ -186,6 +247,11 @@ export async function handleReportModalSubmit(
     await thread.send({
       flags: threadInitialMsg.flags,
       components: threadInitialMsg.components
+    }).catch(async () => {
+      // Fallback text if Components V2 flag rejected in thread
+      await thread.send({
+        content: `### 📋 Investigation Thread — Report \`${report.reportCode}\`\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`Awaiting Agent Triage & Analysis\``
+      });
     });
   } catch (err) {
     console.error('[Verity] Failed to create thread under report message:', err);
@@ -209,8 +275,8 @@ export async function handleReportModalSubmit(
         flags: updatedPayload.flags,
         components: updatedPayload.components
       });
-    } catch (err) {
-      console.warn('[Verity] Notice: Could not update report container with thread link:', err);
+    } catch {
+      // Ignore if edit fails
     }
   }
 
