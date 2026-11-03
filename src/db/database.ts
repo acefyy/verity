@@ -1,0 +1,367 @@
+import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
+import { SCHEMA_SQL } from './schema.js';
+import { config } from '../config.js';
+
+export interface IntakeSession {
+  id: string;
+  sessionId: string;
+  reporterId: string;
+  guildId: string;
+  channelId: string;
+  targetMessageId: string;
+  reportedUserId: string;
+  used: boolean;
+  expiresAt: number;
+  createdAt: number;
+}
+
+export interface Report {
+  id: string;
+  reportCode: string;
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  messageLink: string;
+  reportedUserId: string;
+  reporterId: string;
+  reason: string;
+  status: string;
+  discordReportsMsgId?: string | null;
+  discordThreadId?: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EvidenceMetadata {
+  id: string;
+  reportId: string;
+  filename: string;
+  detectedMimeType: string;
+  sizeBytes: number;
+  sha256Hash: string;
+  discordCdnUrl: string;
+  discordAttachmentId?: string | null;
+  createdAt: number;
+}
+
+export class Database {
+  private db: DatabaseSync;
+
+  constructor(dbPath: string = config.databasePath) {
+    this.db = new DatabaseSync(dbPath);
+    this.init();
+  }
+
+  private init(): void {
+    // Enable WAL mode and busy timeout for concurrent safety
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL;');
+      this.db.exec('PRAGMA busy_timeout = 5000;');
+    } catch {
+      // Ignore if in-memory or unsupported
+    }
+    this.db.exec(SCHEMA_SQL);
+  }
+
+  public close(): void {
+    this.db.close();
+  }
+
+  // --- Intake Sessions ---
+
+  public createIntakeSession(params: {
+    reporterId: string;
+    guildId: string;
+    channelId: string;
+    targetMessageId: string;
+    reportedUserId: string;
+    ttlMinutes?: number;
+  }): IntakeSession {
+    const id = randomUUID();
+    const sessionId = randomUUID();
+    const createdAt = Date.now();
+    const expiresAt = createdAt + (params.ttlMinutes ?? 15) * 60 * 1000;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO intake_sessions (
+        id, session_id, reporter_id, guild_id, channel_id,
+        target_message_id, reported_user_id, used, expires_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      sessionId,
+      params.reporterId,
+      params.guildId,
+      params.channelId,
+      params.targetMessageId,
+      params.reportedUserId,
+      expiresAt,
+      createdAt
+    );
+
+    return {
+      id,
+      sessionId,
+      reporterId: params.reporterId,
+      guildId: params.guildId,
+      channelId: params.channelId,
+      targetMessageId: params.targetMessageId,
+      reportedUserId: params.reportedUserId,
+      used: false,
+      expiresAt,
+      createdAt
+    };
+  }
+
+  public consumeIntakeSession(params: {
+    sessionId: string;
+    reporterId: string;
+    guildId: string;
+  }): IntakeSession {
+    const now = Date.now();
+
+    // Query session
+    const selectStmt = this.db.prepare(`
+      SELECT * FROM intake_sessions WHERE session_id = ?
+    `);
+    const row = selectStmt.get(params.sessionId) as any;
+
+    if (!row) {
+      throw new Error('Intake session not found or invalid.');
+    }
+
+    if (row.used === 1) {
+      throw new Error('Intake session has already been used (replay prevented).');
+    }
+
+    if (row.expires_at < now) {
+      throw new Error('Intake session has expired.');
+    }
+
+    if (row.reporter_id !== params.reporterId) {
+      throw new Error('Intake session reporter mismatch (unauthorized submission origin).');
+    }
+
+    if (row.guild_id !== params.guildId) {
+      throw new Error('Intake session guild mismatch.');
+    }
+
+    // Mark as used atomically
+    const updateStmt = this.db.prepare(`
+      UPDATE intake_sessions SET used = 1 WHERE session_id = ? AND used = 0
+    `);
+    const result = updateStmt.run(params.sessionId);
+
+    if (result.changes === 0) {
+      throw new Error('Concurrent session consumption conflict.');
+    }
+
+    return {
+      id: row.id,
+      sessionId: row.session_id,
+      reporterId: row.reporter_id,
+      guildId: row.guild_id,
+      channelId: row.channel_id,
+      targetMessageId: row.target_message_id,
+      reportedUserId: row.reported_user_id,
+      used: true,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at
+    };
+  }
+
+  // --- Reports ---
+
+  public getNextReportCode(): string {
+    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM reports');
+    const result = stmt.get() as any;
+    const nextNum = (result?.count ?? 0) + 1;
+    return `V-${String(nextNum).padStart(3, '0')}`;
+  }
+
+  public createReport(params: {
+    reportCode?: string;
+    guildId: string;
+    channelId: string;
+    messageId: string;
+    messageLink: string;
+    reportedUserId: string;
+    reporterId: string;
+    reason: string;
+    status?: string;
+  }): Report {
+    const id = randomUUID();
+    const reportCode = params.reportCode ?? this.getNextReportCode();
+    const now = Date.now();
+    const status = params.status ?? 'submitted';
+
+    const stmt = this.db.prepare(`
+      INSERT INTO reports (
+        id, report_code, guild_id, channel_id, message_id,
+        message_link, reported_user_id, reporter_id, reason,
+        status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      reportCode,
+      params.guildId,
+      params.channelId,
+      params.messageId,
+      params.messageLink,
+      params.reportedUserId,
+      params.reporterId,
+      params.reason,
+      status,
+      now,
+      now
+    );
+
+    return {
+      id,
+      reportCode,
+      guildId: params.guildId,
+      channelId: params.channelId,
+      messageId: params.messageId,
+      messageLink: params.messageLink,
+      reportedUserId: params.reportedUserId,
+      reporterId: params.reporterId,
+      reason: params.reason,
+      status,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  public updateReportDiscordIds(
+    reportId: string,
+    discordReportsMsgId: string,
+    discordThreadId: string
+  ): void {
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      UPDATE reports
+      SET discord_reports_msg_id = ?, discord_thread_id = ?, updated_at = ?
+      WHERE id = ?
+    `);
+    stmt.run(discordReportsMsgId, discordThreadId, now, reportId);
+  }
+
+  public getReportById(reportId: string): Report | null {
+    const stmt = this.db.prepare('SELECT * FROM reports WHERE id = ?');
+    const row = stmt.get(reportId) as any;
+    if (!row) return null;
+    return this.mapReportRow(row);
+  }
+
+  public getReportByCode(reportCode: string): Report | null {
+    const stmt = this.db.prepare('SELECT * FROM reports WHERE report_code = ?');
+    const row = stmt.get(reportCode) as any;
+    if (!row) return null;
+    return this.mapReportRow(row);
+  }
+
+  // --- Evidence Metadata ---
+
+  public addEvidenceMetadata(params: {
+    reportId: string;
+    filename: string;
+    detectedMimeType: string;
+    sizeBytes: number;
+    sha256Hash: string;
+    discordCdnUrl: string;
+    discordAttachmentId?: string | null;
+  }): EvidenceMetadata {
+    const id = randomUUID();
+    const now = Date.now();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO report_evidence_metadata (
+        id, report_id, filename, detected_mime_type,
+        size_bytes, sha256_hash, discord_cdn_url,
+        discord_attachment_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      params.reportId,
+      params.filename,
+      params.detectedMimeType,
+      params.sizeBytes,
+      params.sha256Hash,
+      params.discordCdnUrl,
+      params.discordAttachmentId ?? null,
+      now
+    );
+
+    return {
+      id,
+      reportId: params.reportId,
+      filename: params.filename,
+      detectedMimeType: params.detectedMimeType,
+      sizeBytes: params.sizeBytes,
+      sha256Hash: params.sha256Hash,
+      discordCdnUrl: params.discordCdnUrl,
+      discordAttachmentId: params.discordAttachmentId ?? null,
+      createdAt: now
+    };
+  }
+
+  public getEvidenceByReportId(reportId: string): EvidenceMetadata[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM report_evidence_metadata WHERE report_id = ?
+    `);
+    const rows = stmt.all(reportId) as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      reportId: r.report_id,
+      filename: r.filename,
+      detectedMimeType: r.detected_mime_type,
+      sizeBytes: r.size_bytes,
+      sha256Hash: r.sha256_hash,
+      discordCdnUrl: r.discord_cdn_url,
+      discordAttachmentId: r.discord_attachment_id,
+      createdAt: r.created_at
+    }));
+  }
+
+  private mapReportRow(row: any): Report {
+    return {
+      id: row.id,
+      reportCode: row.report_code,
+      guildId: row.guild_id,
+      channelId: row.channel_id,
+      messageId: row.message_id,
+      messageLink: row.message_link,
+      reportedUserId: row.reported_user_id,
+      reporterId: row.reporter_id,
+      reason: row.reason,
+      status: row.status,
+      discordReportsMsgId: row.discord_reports_msg_id,
+      discordThreadId: row.discord_thread_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+}
+
+// Lazy global database instance to prevent locking when multiple test files import database.ts
+let _defaultDb: Database | null = null;
+
+export const db = new Proxy({} as Database, {
+  get(_target, prop) {
+    if (!_defaultDb) {
+      _defaultDb = new Database();
+    }
+    const val = (_defaultDb as any)[prop];
+    if (typeof val === 'function') {
+      return val.bind(_defaultDb);
+    }
+    return val;
+  }
+});

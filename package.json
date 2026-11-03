@@ -1,0 +1,20 @@
+{
+  "name": "verity",
+  "version": "0.1.0",
+  "description": "Verity: AI-Assisted Discord Moderation & Investigation Workflow using Switch",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "test": "node --import tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
