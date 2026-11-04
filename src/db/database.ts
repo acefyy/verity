@@ -29,6 +29,7 @@ export interface Report {
   status: string;
   discordReportsMsgId?: string | null;
   discordThreadId?: string | null;
+  discordThreadInitialMsgId?: string | null;
   switchRoomId?: string | null;
   createdAt: number;
   updatedAt: number;
@@ -83,9 +84,14 @@ export class Database {
     }
     this.db.exec(SCHEMA_SQL);
 
-    // Ensure backwards compatibility with any existing DB files missing switch_room_id
+    // Ensure backwards compatibility with any existing DB files missing columns
     try {
       this.db.exec('ALTER TABLE reports ADD COLUMN switch_room_id TEXT;');
+    } catch {
+      // Column already exists
+    }
+    try {
+      this.db.exec('ALTER TABLE reports ADD COLUMN discord_thread_initial_msg_id TEXT;');
     } catch {
       // Column already exists
     }
@@ -267,15 +273,25 @@ export class Database {
   public updateReportDiscordIds(
     reportId: string,
     discordReportsMsgId: string,
-    discordThreadId: string
+    discordThreadId: string,
+    discordThreadInitialMsgId?: string | null
   ): void {
     const now = Date.now();
-    const stmt = this.db.prepare(`
-      UPDATE reports
-      SET discord_reports_msg_id = ?, discord_thread_id = ?, updated_at = ?
-      WHERE id = ?
-    `);
-    stmt.run(discordReportsMsgId, discordThreadId, now, reportId);
+    if (discordThreadInitialMsgId !== undefined) {
+      const stmt = this.db.prepare(`
+        UPDATE reports
+        SET discord_reports_msg_id = ?, discord_thread_id = ?, discord_thread_initial_msg_id = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run(discordReportsMsgId, discordThreadId, discordThreadInitialMsgId, now, reportId);
+    } else {
+      const stmt = this.db.prepare(`
+        UPDATE reports
+        SET discord_reports_msg_id = ?, discord_thread_id = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run(discordReportsMsgId, discordThreadId, now, reportId);
+    }
   }
 
   public updateReportStatus(
@@ -514,6 +530,7 @@ export class Database {
       status: row.status,
       discordReportsMsgId: row.discord_reports_msg_id,
       discordThreadId: row.discord_thread_id,
+      discordThreadInitialMsgId: row.discord_thread_initial_msg_id ?? null,
       switchRoomId: row.switch_room_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at

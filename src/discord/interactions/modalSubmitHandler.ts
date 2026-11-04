@@ -245,22 +245,25 @@ export async function handleReportModalSubmit(
     });
 
     const threadInitialMsg = buildThreadInitialContainer(report);
-    await thread.send({
-      flags: threadInitialMsg.flags,
-      components: threadInitialMsg.components
-    }).catch(async () => {
+    let initialMsg;
+    try {
+      initialMsg = await thread.send({
+        flags: threadInitialMsg.flags,
+        components: threadInitialMsg.components
+      });
+    } catch {
       // Fallback text if Components V2 flag rejected in thread
-      await thread.send({
+      initialMsg = await thread.send({
         content: `### 📋 Investigation Thread — Report \`${report.reportCode}\`\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`Awaiting Agent Triage & Analysis\``
       });
-    });
+    }
   } catch (err) {
     console.error('[Verity] Failed to create thread under report message:', err);
   }
 
   // 11. Update report in DB with message and thread IDs
   const threadId = thread ? thread.id : null;
-  db.updateReportDiscordIds(report.id, reportMessage.id, threadId || '');
+  db.updateReportDiscordIds(report.id, reportMessage.id, threadId || '', initialMsg?.id || null);
 
   // 12. Update #reports container message to include "Open Investigation Thread" button
   if (thread) {

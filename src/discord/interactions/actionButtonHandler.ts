@@ -2,11 +2,18 @@ import {
   ButtonInteraction,
   GuildMember,
   PermissionFlagsBits,
-  ThreadChannel
+  TextChannel
 } from 'discord.js';
 import { db } from '../../db/database.js';
 import { switchClient } from '../../switch/switchClient.js';
-import { buildResolutionContainer } from '../components/investigationContainerBuilder.js';
+import {
+  buildResolvedActionContainer
+} from '../components/investigationContainerBuilder.js';
+import {
+  buildThreadInitialContainer,
+  buildReportContainer
+} from '../components/reportContainerBuilder.js';
+import { config } from '../../config.js';
 
 export async function handleActionButton(interaction: ButtonInteraction): Promise<void> {
   const customId = interaction.customId;
@@ -65,6 +72,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
   const isOwner = guild.ownerId === interaction.user.id;
   const hasAdmin = moderatorMember.permissions.has(PermissionFlagsBits.Administrator);
   const hasModerate = moderatorMember.permissions.has(PermissionFlagsBits.ModerateMembers);
+  const hasKick = moderatorMember.permissions.has(PermissionFlagsBits.KickMembers);
   const hasBan = moderatorMember.permissions.has(PermissionFlagsBits.BanMembers);
   const hasManageMessages = moderatorMember.permissions.has(PermissionFlagsBits.ManageMessages);
 
@@ -75,10 +83,17 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
       });
       return;
     }
+  } else if (action === 'kick') {
+    if (!isOwner && !hasAdmin && !hasKick) {
+      await interaction.editReply({
+        content: '🚫 Authorization failed: You lack the `Kick Members` permission required to kick members.'
+      });
+      return;
+    }
   } else if (action === 'timeout') {
     if (!isOwner && !hasAdmin && !hasModerate) {
       await interaction.editReply({
-        content: '🚫 Authorization failed: You lack the `Moderate Members` (Timeout) permission.'
+        content: '🚫 Authorization failed: You lack the `Moderate Members` (Timeout/Mute) permission.'
       });
       return;
     }
@@ -100,11 +115,11 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
     // Member may have left the guild
   }
 
-  if (targetMember && (action === 'timeout' || action === 'ban')) {
+  if (targetMember && (action === 'timeout' || action === 'kick' || action === 'ban')) {
     // Check if target is guild owner
     if (targetMember.id === guild.ownerId) {
       await interaction.editReply({
-        content: '🚫 Hierarchy conflict: The guild owner cannot be moderated or banned.'
+        content: '🚫 Hierarchy conflict: The guild owner cannot be moderated, kicked, or banned.'
       });
       return;
     }
@@ -131,9 +146,9 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
   let officialReason = '';
   try {
     if (action === 'dismiss') {
-      officialReason = `Dismissed following multi-agent investigation. Reason cited: ${report.reason}`;
+      officialReason = `Dismissed following multi-agent review. Reason cited: ${report.reason}`;
     } else if (action === 'warn') {
-      officialReason = `Official warning issued: Violation of community guidelines regarding "${report.reason}".`;
+      officialReason = `Official warning issued: Violation regarding "${report.reason}".`;
       // Attempt to DM the target member with a warning notice
       if (targetMember) {
         await targetMember.send({
@@ -146,8 +161,14 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
       if (!targetMember) {
         throw new Error('Target member is not currently in the server and cannot be timed out.');
       }
-      officialReason = `24-hour timeout applied for: ${report.reason}`;
+      officialReason = `24-hour timeout (mute) applied for: ${report.reason}`;
       await targetMember.timeout(24 * 60 * 60 * 1000, `Verity [${report.reportCode}]: ${report.reason}`);
+    } else if (action === 'kick') {
+      if (!targetMember) {
+        throw new Error('Target member is not currently in the server and cannot be kicked.');
+      }
+      officialReason = `Server kick enforced for: ${report.reason}`;
+      await targetMember.kick(`Verity [${report.reportCode}]: ${report.reason}`);
     } else if (action === 'ban') {
       officialReason = `Server ban enforced for: ${report.reason}`;
       await guild.members.ban(report.reportedUserId, {
@@ -169,7 +190,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
 
   // --- Step 4: Record Resolution in Database ---
   const executedAt = Date.now();
-  const resolution = db.recordModerationResolution({
+  db.recordModerationResolution({
     reportId: report.id,
     moderatorId: interaction.user.id,
     actionTaken: action,
@@ -179,40 +200,86 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
 
   db.updateReportStatus(report.id, 'resolved');
 
-  // --- Step 5: Post Emerald Green Resolution Container into Thread ---
+  // Fetch advisor recommendation text if available to preserve in resolved container
+  const milestones = db.getInvestigationMilestones(report.id);
+  const advisorMilestone = milestones.find((m) => m.phase.includes('Advisor'));
+
+  // --- Step 5: Update the Existing Action Container in Place (No New Container Sent) ---
+  const resolvedPayload = buildResolvedActionContainer({
+    report,
+    advisorContent: advisorMilestone?.content,
+    actionTaken: action,
+    moderatorId: interaction.user.id,
+    officialReason,
+    executedAt
+  });
+
+  try {
+    await interaction.message.edit({
+      flags: resolvedPayload.flags,
+      components: resolvedPayload.components
+    });
+  } catch (editErr: any) {
+    console.warn('[Verity ActionButton] Could not edit action container in place:', editErr?.message);
+    // Fallback: edit with text content
+    await interaction.message.edit({
+      content: `### 🛡️ Status: Resolved • Action Taken: \`${action.toUpperCase()}\`\n**Target:** <@${report.reportedUserId}>\n**Authorized by:** <@${interaction.user.id}>\n> **Official Reason:** ${officialReason}`,
+      components: []
+    }).catch(() => {});
+  }
+
+  // --- Step 6: Update Initial Thread Container in Place to Reflect Resolved Status ---
   const thread = interaction.channel;
   if (thread && thread.isThread()) {
-    const resPayload = buildResolutionContainer({
-      reportCode: report.reportCode,
-      actionTaken: action,
-      moderatorId: interaction.user.id,
-      officialReason,
-      targetUserId: report.reportedUserId,
-      executedAt
-    });
-
     try {
-      await thread.send({
-        flags: resPayload.flags,
-        components: resPayload.components
-      });
-    } catch {
-      await thread.send({
-        content: `### 🛡️ Case Resolved: \`${action.toUpperCase()}\` • Report \`${report.reportCode}\`\n- **Target:** <@${report.reportedUserId}>\n- **Moderator:** <@${interaction.user.id}>\n- **Action:** \`${action.toUpperCase()}\`\n> **Official Reason:** ${officialReason}`
-      });
+      let initialMsg = null;
+      if (report.discordThreadInitialMsgId) {
+        initialMsg = await thread.messages.fetch(report.discordThreadInitialMsgId).catch(() => null);
+      }
+      if (!initialMsg) {
+        const messages = await thread.messages.fetch({ limit: 10 });
+        initialMsg = [...messages.values()]
+          .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+          .find((m) => m.components?.[0]?.type === 17);
+      }
+      if (initialMsg && initialMsg.id !== interaction.message.id) {
+        const updatedInitial = buildThreadInitialContainer(report, `Resolved (${action.toUpperCase()})`);
+        await initialMsg.edit({
+          flags: updatedInitial.flags,
+          components: updatedInitial.components
+        }).catch(() => {});
+      }
+    } catch (err: any) {
+      console.warn('[Verity ActionButton] Could not update thread initial container:', err?.message);
     }
   }
 
-  // --- Step 6: Disable Buttons on the Triggering Message ---
+  // --- Step 7: Update #reports Container Message to Reflect Resolved Status ---
   try {
-    await interaction.message.edit({
-      components: []
-    });
-  } catch {
-    // If edit fails, non-critical
+    if (report.discordReportsMsgId) {
+      const reportsChannel = await interaction.client.channels.fetch(config.reportsChannelId);
+      if (reportsChannel && reportsChannel.isTextBased()) {
+        const repMsg = await (reportsChannel as TextChannel).messages.fetch(report.discordReportsMsgId).catch(() => null);
+        if (repMsg) {
+          const threadUrl = thread?.isThread() ? thread.url : undefined;
+          const updatedReportsContainer = buildReportContainer({
+            report,
+            files: [],
+            threadUrl,
+            statusOverride: `RESOLVED (${action.toUpperCase()})`
+          });
+          await repMsg.edit({
+            flags: updatedReportsContainer.flags,
+            components: updatedReportsContainer.components
+          }).catch(() => {});
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Verity ActionButton] Could not update #reports message:', err?.message);
   }
 
-  // --- Step 7: Synchronize Resolution Back to Switch Room ---
+  // --- Step 8: Synchronize Resolution Back to Switch Room ---
   if (report.switchRoomId) {
     const switchNotice =
       `⚖️ **Case Officially Resolved by Human Moderator**\n\n` +
@@ -227,7 +294,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
     });
   }
 
-  // --- Step 8: Ephemeral Success Response ---
+  // --- Step 9: Ephemeral Success Response ---
   await interaction.editReply({
     content: `✅ Moderation action \`${action.toUpperCase()}\` successfully authorized and applied for Report \`${report.reportCode}\`.`
   });

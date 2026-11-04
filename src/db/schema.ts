@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS reports (
   status TEXT NOT NULL DEFAULT 'submitted',
   discord_reports_msg_id TEXT,
   discord_thread_id TEXT,
+  discord_thread_initial_msg_id TEXT,
   switch_room_id TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL

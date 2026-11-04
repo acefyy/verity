@@ -7,11 +7,43 @@ import {
   buildPhase3Container,
   buildInvestigationErrorContainer
 } from '../discord/components/investigationContainerBuilder.js';
+import { buildThreadInitialContainer } from '../discord/components/reportContainerBuilder.js';
 
 export interface InvestigationContext {
   report: Report;
   thread: ThreadChannel;
   client: Client;
+}
+
+/**
+ * Updates the initial container in the investigation thread to reflect current progress.
+ */
+async function updateThreadInitialStatus(
+  thread: ThreadChannel,
+  report: Report,
+  statusText: string
+): Promise<void> {
+  try {
+    let initialMsg = null;
+    if (report.discordThreadInitialMsgId) {
+      initialMsg = await thread.messages.fetch(report.discordThreadInitialMsgId).catch(() => null);
+    }
+    if (!initialMsg) {
+      const messages = await thread.messages.fetch({ limit: 10 });
+      initialMsg = [...messages.values()]
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        .find((m) => m.components?.[0]?.type === 17);
+    }
+    if (initialMsg) {
+      const updatedContainer = buildThreadInitialContainer(report, statusText);
+      await initialMsg.edit({
+        flags: updatedContainer.flags,
+        components: updatedContainer.components
+      });
+    }
+  } catch (err: any) {
+    console.warn(`[Verity Orchestrator] Could not update thread initial status: ${err?.message}`);
+  }
 }
 
 /**
@@ -25,6 +57,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
 
   // Update status to in_investigation
   db.updateReportStatus(report.id, 'in_investigation');
+  await updateThreadInitialStatus(thread, report, '🔍 Investigation in Progress');
 
   // Step 1: Gather Discord message content & preceding context if available
   let targetMessageContent = 'None available';
@@ -85,6 +118,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
       buildInvestigationErrorContainer(report.reportCode, `Could not connect to Switch gateway: ${err.message}`)
     );
     db.updateReportStatus(report.id, 'investigation_failed');
+    await updateThreadInitialStatus(thread, report, '⚠️ Investigation Failed (Switch Unreachable)');
     return;
   }
 
@@ -188,6 +222,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
 
     // Post Phase 3 with interactive human decision buttons!
     await postThreadSafe(thread, buildPhase3Container(report, advisorResponse));
+    await updateThreadInitialStatus(thread, report, '⚖️ Awaiting Moderator Action');
     console.log(`[Verity Orchestrator] Phase 3 (Advisor) posted to Discord with interactive buttons.`);
   } catch (err: any) {
     console.error(`[Verity Orchestrator] Advisor phase failed:`, err);
@@ -205,29 +240,33 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
         `⚠️ Advisor timed out. Human moderator review required directly based on prior phases.`
       )
     );
+    await updateThreadInitialStatus(thread, report, '⚖️ Awaiting Moderator Action');
   }
 }
 
 /**
  * Safely posts container to thread with automatic text fallback if Components V2 flags fail.
  */
-async function postThreadSafe(thread: ThreadChannel, containerPayload: any): Promise<void> {
+async function postThreadSafe(thread: ThreadChannel, containerPayload: any): Promise<any> {
   try {
-    await thread.send({
+    return await thread.send({
       flags: containerPayload.flags,
       components: containerPayload.components
     });
   } catch (err: any) {
     console.warn(`[Verity Orchestrator] Notice: Components V2 post fallback: ${err?.message}`);
-    // Extract text content from payload for fallback
-    const textContent = containerPayload.components?.[0]?.components?.find((c: any) => c.type === 14)?.content || 'Investigation update';
+    // Extract text content from payload for fallback (type 10: TEXT_DISPLAY)
+    const textContent =
+      containerPayload.components?.[0]?.components?.find((c: any) => c.type === 10)?.content ||
+      'Investigation update';
     const actionRow = containerPayload.components?.[0]?.components?.find((c: any) => c.type === 1);
 
-    await thread.send({
+    return await thread.send({
       content: textContent,
       components: actionRow ? [actionRow] : []
     }).catch((fallbackErr) => {
       console.error(`[Verity Orchestrator] Thread fallback send error:`, fallbackErr);
+      return null;
     });
   }
 }

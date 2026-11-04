@@ -4,7 +4,7 @@ import {
   buildPhase1Container,
   buildPhase2Container,
   buildPhase3Container,
-  buildResolutionContainer,
+  buildResolvedActionContainer,
   buildInvestigationErrorContainer,
   IS_COMPONENTS_V2
 } from '../src/discord/components/investigationContainerBuilder.js';
@@ -26,7 +26,7 @@ describe('Investigation Components V2 Container Specifications', () => {
     updatedAt: Date.now()
   };
 
-  test('Phase 1 container is neutral (no accent color) with IS_COMPONENTS_V2 flag', () => {
+  test('Phase 1 container uses type 10 (TEXT_DISPLAY) and is neutral without decorative accent color', () => {
     const payload = buildPhase1Container(mockReport, 'Severity: Medium. Urgency: Normal.');
 
     assert.equal(payload.flags, IS_COMPONENTS_V2);
@@ -37,12 +37,12 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(container.accent_color, undefined); // Neutral container: no decorative accent
 
     const textComp = container.components[0];
-    assert.equal(textComp.type, 14); // Text Display
+    assert.equal(textComp.type, 10); // ComponentType.TEXT_DISPLAY
     assert.ok(textComp.content.includes('Phase 1: Report Triage Assessment'));
     assert.ok(textComp.content.includes('report-triage'));
   });
 
-  test('Phase 2 container is neutral (no accent color) with IS_COMPONENTS_V2 flag', () => {
+  test('Phase 2 container uses type 10 (TEXT_DISPLAY) and is neutral without decorative accent color', () => {
     const payload = buildPhase2Container(mockReport, 'Verified: Message exists. Unverified: Alleged external context.');
 
     assert.equal(payload.flags, IS_COMPONENTS_V2);
@@ -51,12 +51,12 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(container.accent_color, undefined); // Neutral container
 
     const textComp = container.components[0];
-    assert.equal(textComp.type, 14);
+    assert.equal(textComp.type, 10); // ComponentType.TEXT_DISPLAY
     assert.ok(textComp.content.includes('Phase 2: Evidence Forensics & Verification'));
     assert.ok(textComp.content.includes('report-investigator'));
   });
 
-  test('Phase 3 container includes 4 Action Row decision buttons', () => {
+  test('Phase 3 container uses type 10 (TEXT_DISPLAY) and includes 5 Action Row decision buttons', () => {
     const payload = buildPhase3Container(mockReport, 'Recommended action: Warn member.');
 
     assert.equal(payload.flags, IS_COMPONENTS_V2);
@@ -64,9 +64,13 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(container.type, 17);
     assert.equal(container.accent_color, undefined);
 
+    const textComp = container.components.find((c: any) => c.type === 10);
+    assert.ok(textComp, 'Text display must be present with type 10');
+    assert.ok(textComp.content.includes('Phase 3: Moderation Advisor Recommendation'));
+
     const actionRow = container.components.find((c: any) => c.type === 1);
     assert.ok(actionRow, 'Action row must be present');
-    assert.equal(actionRow.components.length, 4);
+    assert.equal(actionRow.components.length, 5); // Dismiss, Warn, Mute/Timeout, Kick, Ban
 
     const buttons = actionRow.components;
     assert.equal(buttons[0].custom_id, `verity:act:dismiss:${mockReport.id}`);
@@ -78,17 +82,20 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(buttons[2].custom_id, `verity:act:timeout:${mockReport.id}`);
     assert.equal(buttons[2].style, 1); // Primary
 
-    assert.equal(buttons[3].custom_id, `verity:act:ban:${mockReport.id}`);
+    assert.equal(buttons[3].custom_id, `verity:act:kick:${mockReport.id}`);
     assert.equal(buttons[3].style, 4); // Danger / Red
+
+    assert.equal(buttons[4].custom_id, `verity:act:ban:${mockReport.id}`);
+    assert.equal(buttons[4].style, 4); // Danger / Red
   });
 
-  test('Resolution container enforces Emerald Green accent color (0x22C55E)', () => {
-    const payload = buildResolutionContainer({
-      reportCode: 'V-042',
+  test('Resolved action container enforces Emerald Green accent (0x22C55E) and removes action buttons', () => {
+    const payload = buildResolvedActionContainer({
+      report: mockReport,
+      advisorContent: 'Recommended action: Timeout 24h.',
       actionTaken: 'timeout',
       moderatorId: 'mod_999',
       officialReason: '24h timeout applied following confirmed spam pattern.',
-      targetUserId: 'target_456',
       executedAt: Date.now()
     });
 
@@ -98,14 +105,20 @@ describe('Investigation Components V2 Container Specifications', () => {
     // Meaningful accent color for resolved outcome
     assert.equal(container.accent_color, 0x22C55E);
 
-    const textComp = container.components[0];
-    assert.equal(textComp.type, 14);
-    assert.ok(textComp.content.includes('Case Resolved: TIMEOUT'));
-    assert.ok(textComp.content.includes('target_456'));
-    assert.ok(textComp.content.includes('mod_999'));
+    // Verify Action Row is completely removed
+    const actionRow = container.components.find((c: any) => c.type === 1);
+    assert.equal(actionRow, undefined, 'Action buttons must be removed when resolved');
+
+    // Verify resolution text display
+    const resTextComp = container.components.find((c: any) => c.content?.includes('Status: Resolved'));
+    assert.ok(resTextComp);
+    assert.equal(resTextComp.type, 10);
+    assert.ok(resTextComp.content.includes('TIMEOUT'));
+    assert.ok(resTextComp.content.includes('target_456'));
+    assert.ok(resTextComp.content.includes('mod_999'));
   });
 
-  test('Error container enforces Crimson Red accent color (0xEF4444)', () => {
+  test('Error container enforces Crimson Red accent color (0xEF4444) and uses type 10 for text', () => {
     const payload = buildInvestigationErrorContainer('V-042', 'Switch connection timeout');
 
     assert.equal(payload.flags, IS_COMPONENTS_V2);
@@ -115,7 +128,7 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(container.accent_color, 0xEF4444);
 
     const textComp = container.components[0];
-    assert.equal(textComp.type, 14);
+    assert.equal(textComp.type, 10); // TEXT_DISPLAY
     assert.ok(textComp.content.includes('Investigation Alert'));
     assert.ok(textComp.content.includes('Switch connection timeout'));
   });

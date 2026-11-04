@@ -21,7 +21,7 @@ export function buildPhase1Container(report: Report, triageContent: string) {
         type: 17, // Container
         components: [
           {
-            type: 14, // Text Display
+            type: 10, // Text Display (type 10 in Components V2)
             content: `### 🧭 Phase 1: Report Triage Assessment • Report \`${report.reportCode}\`\n\n${sanitizeContent(triageContent)}\n\n*— Assessed by Switch Agent \`report-triage\`*`
           }
         ]
@@ -41,7 +41,7 @@ export function buildPhase2Container(report: Report, investigatorContent: string
         type: 17, // Container
         components: [
           {
-            type: 14, // Text Display
+            type: 10, // Text Display (type 10 in Components V2)
             content: `### 🔍 Phase 2: Evidence Forensics & Verification • Report \`${report.reportCode}\`\n\n${sanitizeContent(investigatorContent)}\n\n*— Investigated by Switch Agent \`report-investigator\`*`
           }
         ]
@@ -52,7 +52,7 @@ export function buildPhase2Container(report: Report, investigatorContent: string
 
 /**
  * Neutral Components V2 container for Phase 3: Moderation Advisor Recommendation
- * Features 4 interactive decision buttons for the human moderator.
+ * Features 5 interactive decision buttons for the human moderator (Dismiss, Warn, Mute/Timeout, Kick, Ban).
  */
 export function buildPhase3Container(
   report: Report,
@@ -61,7 +61,7 @@ export function buildPhase3Container(
 ) {
   const containerComponents: any[] = [
     {
-      type: 14, // Text Display
+      type: 10, // Text Display (type 10 in Components V2)
       content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${report.reportCode}\`\n\n${sanitizeContent(advisorContent)}\n\n*— Recommended by Switch Agent \`moderation-advisor\`*\n\n> 👤 **Human Decision Required:** Select an action below to authorize and enforce moderation.`
     }
   ];
@@ -80,15 +80,22 @@ export function buildPhase3Container(
         {
           type: 2, // Button
           style: 1, // Primary / Blurple
-          label: 'Issue Warning',
+          label: 'Warn Member',
           custom_id: `verity:act:warn:${report.id}`,
           disabled: options.disabled ?? false
         },
         {
           type: 2, // Button
           style: 1, // Primary / Blurple
-          label: 'Timeout 24h',
+          label: 'Mute / Timeout',
           custom_id: `verity:act:timeout:${report.id}`,
+          disabled: options.disabled ?? false
+        },
+        {
+          type: 2, // Button
+          style: 4, // Danger / Red
+          label: 'Kick Member',
+          custom_id: `verity:act:kick:${report.id}`,
           disabled: options.disabled ?? false
         },
         {
@@ -114,19 +121,44 @@ export function buildPhase3Container(
 }
 
 /**
- * Emerald Green accent container for final human resolution
- * Accent color is ONLY applied to denote final resolution state.
+ * In-place updated Action Container for when a report is Resolved.
+ * Replaces the action buttons with the official resolution outcome in Emerald Green (0x22C55E).
  */
-export function buildResolutionContainer(params: {
-  reportCode: string;
+export function buildResolvedActionContainer(params: {
+  report: Report;
+  advisorContent?: string;
   actionTaken: string;
   moderatorId: string;
   officialReason: string;
-  targetUserId: string;
   executedAt: number;
 }) {
   const actionTitle = params.actionTaken.toUpperCase();
   const timeSeconds = Math.floor(params.executedAt / 1000);
+
+  const containerComponents: any[] = [];
+
+  if (params.advisorContent) {
+    containerComponents.push({
+      type: 10, // Text Display
+      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${params.report.reportCode}\`\n\n${sanitizeContent(params.advisorContent)}\n\n*— Recommended by Switch Agent \`moderation-advisor\`*`
+    });
+    containerComponents.push({
+      type: 14, // Separator
+      divider: true,
+      spacing: 1
+    });
+  }
+
+  containerComponents.push({
+    type: 10, // Text Display
+    content: `### 🛡️ Status: Resolved • Action Taken: \`${actionTitle}\`\n\n` +
+      `**Target Member:** <@${params.report.reportedUserId}> (\`${params.report.reportedUserId}\`)\n` +
+      `**Authorized By:** <@${params.moderatorId}> (\`${params.moderatorId}\`)\n` +
+      `**Action Applied:** \`${actionTitle}\`\n` +
+      `**Timestamp:** <t:${timeSeconds}:F> (<t:${timeSeconds}:R>)\n` +
+      `> **Official Reason:**\n> ${params.officialReason}\n\n` +
+      `*Investigation completed. Action authorized and synchronized with Switch.*`
+  });
 
   return {
     flags: IS_COMPONENTS_V2,
@@ -134,18 +166,7 @@ export function buildResolutionContainer(params: {
       {
         type: 17, // Container
         accent_color: 0x22C55E, // Emerald Green (meaningful success state)
-        components: [
-          {
-            type: 14, // Text Display
-            content: `### 🛡️ Case Resolved: ${actionTitle} • Report \`${params.reportCode}\`\n\n` +
-              `**Target Member:** <@${params.targetUserId}> (\`${params.targetUserId}\`)\n` +
-              `**Authorized By:** <@${params.moderatorId}> (\`${params.moderatorId}\`)\n` +
-              `**Action Applied:** \`${actionTitle}\`\n` +
-              `**Timestamp:** <t:${timeSeconds}:F> (<t:${timeSeconds}:R>)\n` +
-              `> **Official Reason:**\n> ${params.officialReason}\n\n` +
-              `*Multi-agent investigation completed and human decision synchronized.*`
-          }
-        ]
+        components: containerComponents
       }
     ]
   };
@@ -167,7 +188,7 @@ export function buildInvestigationErrorContainer(
         accent_color: 0xEF4444, // Crimson Red (meaningful error state)
         components: [
           {
-            type: 14, // Text Display
+            type: 10, // Text Display
             content: `### ⚠️ Investigation Alert • Report \`${reportCode}\`\n\n` +
               `**Investigation status:** Incomplete multi-agent cycle.\n` +
               `**Reason:** ${errorMessage}\n\n` +

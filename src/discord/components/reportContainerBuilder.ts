@@ -6,6 +6,7 @@ export interface ReportContainerParams {
   files: ValidatedFile[];
   threadUrl?: string;
   evidenceError?: string | null;
+  statusOverride?: string;
 }
 
 /**
@@ -17,14 +18,17 @@ export function buildReportContainer(params: {
   files: ValidatedFile[];
   threadUrl?: string;
   evidenceError?: string | null;
+  statusOverride?: string;
 }) {
-  const { report, files, threadUrl, evidenceError } = params;
+  const { report, files, threadUrl, evidenceError, statusOverride } = params;
   const timestampSeconds = Math.floor(report.createdAt / 1000);
+  const currentStatus = statusOverride || report.status;
+  const isResolved = currentStatus.toLowerCase().includes('resolved');
 
   const containerComponents: any[] = [
     {
       type: 10, // TEXT_DISPLAY
-      content: `### 🛡️ Report \`${report.reportCode}\` • Pending Investigation\n**Status:** 🟡 \`${report.status.toUpperCase()}\``
+      content: `### 🛡️ Report \`${report.reportCode}\` • ${isResolved ? 'Resolved' : 'Pending Investigation'}\n**Status:** ${isResolved ? '🟢' : '🟡'} \`${currentStatus.toUpperCase()}\``
     },
     {
       type: 14 // SEPARATOR
@@ -95,18 +99,23 @@ export function buildReportContainer(params: {
 }
 
 /**
- * Builds the initial neutral Container inside the report's dedicated thread.
+ * Builds the initial Container inside the report's dedicated thread.
+ * When resolved, displays Emerald Green accent (0x22C55E).
  */
-export function buildThreadInitialContainer(report: Report) {
+export function buildThreadInitialContainer(report: Report, statusText?: string) {
+  const currentStatus = statusText || (report.status === 'resolved' ? 'Resolved' : 'Awaiting Agent Triage & Analysis');
+  const isResolved = currentStatus.toLowerCase().includes('resolved');
+
   return {
     flags: 32768, // IS_COMPONENTS_V2
     components: [
       {
         type: 17, // CONTAINER
+        accent_color: isResolved ? 0x22C55E : undefined,
         components: [
           {
             type: 10, // TEXT_DISPLAY
-            content: `### 📋 Investigation Thread — Report \`${report.reportCode}\`\nThis thread records the multi-agent investigation, evidence review, and human moderator decisions.\n\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`Awaiting Agent Triage & Analysis\``
+            content: `### 📋 Investigation Thread — Report \`${report.reportCode}\`\nThis thread records the multi-agent investigation, evidence review, and human moderator decisions.\n\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`${currentStatus}\``
           }
         ]
       }
