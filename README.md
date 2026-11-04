@@ -24,6 +24,7 @@ Verity reimagines moderation as an institutional case management workflow:
    - **Phase 3: Moderation Advisor** (`moderation-advisor`): Policy synthesis and proportional punishment recommendation.
 3. **Human Authorization & Execution:** AI agents never possess Discord punishment permissions. Verity enforces a strict two-tier permission and role-hierarchy check on the human moderator before executing actions (`Dismiss`, `Warn`, `Timeout`, `Kick`, `Ban`) directly via interactive Discord buttons.
 4. **Closed-Loop Audit Trail:** Final human decisions are updated in-place inside Discord threads and synchronized back to the Switch room, leaving an immutable record across both platforms.
+5. **Server Governance & Settings:** Dedicated `/settings` slash command with Channel Selects and Checkboxes to configure report routing, action audit log channels, and mandatory evidence enforcement.
 
 ---
 
@@ -63,10 +64,12 @@ Verity reimagines moderation as an institutional case management workflow:
        │
        ▼
 [ Human Moderator Decision ]
+  ├── Checks server settings (Require Evidence toggle)
   ├── Verifies moderator server permissions (Administrator / Moderate / Kick / Ban)
   ├── Verifies Discord role hierarchy (Moderator > Target, Bot > Target)
   ├── Executes Discord moderation action via API
   ├── Updates Discord action container in place to Emerald Green (0x22C55E)
+  ├── Sends formatted audit log to Action Log Channel (if configured)
   └── Synchronizes resolution and reason back to Switch room chat
 ```
 
@@ -90,10 +93,17 @@ Verity reimagines moderation as an institutional case management workflow:
 - **In-Place Live Updates:** When an agent begins work, Verity posts a live progress container (`⏳ @agent is working...`) and edits it in place to the final findings upon completion.
 - **In-Place Case Resolution:** When a moderator clicks an action button, the message is updated in place to an Emerald Green resolution badge (`0x22C55E`), disabling the buttons and displaying who authorized the action, what action was taken, and the official reason.
 
-### 4. Human-in-the-Loop Governance
+### 4. Human-in-the-Loop Governance & Evidence Enforcement
 - **Zero Agent Autonomy for Punishments:** AI agents advise; humans decide.
 - **Two-Tier Discord Permission Verification:** Validates server-side that the clicking user has the required native Discord permissions (`ModerateMembers`, `KickMembers`, `BanMembers`).
 - **Role Hierarchy Enforcement:** Ensures neither the moderator nor the bot can act against a user with equal or higher role position, preventing privilege escalation.
+- **Require Evidence Policy:** When enabled in `/settings`, moderators cannot complete punitive actions on reports lacking evidence without providing verified proof details via an interactive confirmation modal.
+
+### 5. Server-Specific Settings & Action Audit Logs (`/settings`)
+- **Immediate Configuration Modal:** Running `/settings` opens an interactive configuration modal with native Channel Selects and Checkboxes.
+- **Report Channel Routing:** Directs incoming reports and investigation threads to any designated channel per guild.
+- **Action Log Channel:** Sends formatted Components V2 audit logs to an authorized channel whenever moderation actions (`Warn`, `Timeout`, `Kick`, `Ban`, `Dismiss`) are completed.
+- **Graceful Fault Tolerance:** Gracefully handles missing channels, deleted channels, and insufficient bot permissions without crashing or halting moderation workflows.
 
 ---
 
@@ -117,21 +127,27 @@ verity/
 │   ├── index.ts                                # Application entry point & crash resilience
 │   ├── config.ts                               # Environment configuration and validation
 │   ├── db/
-│   │   ├── database.ts                         # SQLite WAL repository (Sessions, Reports, Milestones)
+│   │   ├── database.ts                         # SQLite WAL repository (Sessions, Reports, Settings, Milestones)
 │   │   └── schema.ts                           # Database table definitions and indices
 │   ├── discord/
 │   │   ├── client.ts                           # Discord client setup & interaction routing
-│   │   ├── registerCommands.ts                 # Context menu application command registration
+│   │   ├── registerCommands.ts                 # Slash and context menu command registration
 │   │   ├── commands/
-│   │   │   └── reportCommand.ts                # "Report Message" context menu definition
+│   │   │   ├── reportCommand.ts                # "Report Message" context menu definition
+│   │   │   └── settingsCommand.ts              # "/settings" slash command definition
 │   │   ├── components/
 │   │   │   ├── modalBuilder.ts                 # 2-field Components V2 report modal
+│   │   │   ├── settingsModalBuilder.ts         # Channel Select & Checkbox configuration modal
+│   │   │   ├── actionLogContainerBuilder.ts    # Moderation action audit log container
 │   │   │   ├── reportContainerBuilder.ts       # #reports neutral container & thread initial message
 │   │   │   └── investigationContainerBuilder.ts # Live progress, phase findings & resolution containers
 │   │   └── interactions/
 │   │       ├── contextMenuHandler.ts           # Intake session initialization & modal display
 │   │       ├── modalSubmitHandler.ts           # Modal ingestion, validation, thread creation & dispatch
-│   │       └── actionButtonHandler.ts          # Moderator authorization, role hierarchy & action execution
+│   │       ├── modalParsers.ts                 # Channel Select, Checkbox and input extraction helpers
+│   │       ├── settingsHandler.ts              # /settings command and settings modal submission handler
+│   │       ├── actionButtonHandler.ts          # Moderator authorization, role hierarchy & action triggers
+│   │       └── actionExecution.ts              # Resolution execution, container edits & action logging
 │   ├── evidence/
 │   │   └── validator.ts                        # Magic byte inspection, SHA-256 & memory buffers
 │   ├── investigation/
@@ -145,6 +161,7 @@ verity/
 │   ├── intakeFlowE2E.test.ts                   # Full end-to-end report lifecycle simulation
 │   ├── intakeSession.test.ts                   # Intake session creation, replay prevention & TTL
 │   ├── investigationContainers.test.ts         # Agent containers, buttons & resolution styling
+│   ├── settingsWorkflow.test.ts                # Settings modal, channel selectors, checkboxes & logs
 │   └── switchClient.test.ts                    # Switch authentication, room provisioning & messaging
 ├── .env.example                                # Sample environment configuration
 ├── package.json                                # Project dependencies and scripts
@@ -203,7 +220,7 @@ SWITCH_AGENT_ADVISOR_ID=9646eee2-cea5-436e-9aba-8a3a2040b1d7
 
 ### 3. Run Automated Tests
 
-Verity includes an extensive suite of 31 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, and Discord Components V2 formatting:
+Verity includes an extensive suite of 39 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, and server settings workflows:
 
 ```bash
 npm test
@@ -211,9 +228,9 @@ npm test
 
 Expected output:
 ```
-ℹ tests 31
-ℹ suites 7
-ℹ pass 31
+ℹ tests 39
+ℹ suites 8
+ℹ pass 39
 ℹ fail 0
 ```
 
@@ -231,23 +248,26 @@ Or for production:
 npm start
 ```
 
-Upon startup, Verity registers the `Report Message` context-menu command with Discord, verifies Switch gateway connectivity, and resumes any pending investigations if recovering from an interruption.
+Upon startup, Verity registers the `Report Message` context-menu command and `/settings` slash command with Discord, verifies Switch gateway connectivity, and resumes any pending investigations if recovering from an interruption.
 
 ---
 
 ## Verifying the Workflow in Discord
 
-1. In any Discord server channel, right-click any message -> **Apps** -> **Report Message**.
-2. Enter a detailed reason (15 to 1,000 characters) and optionally upload evidence screenshots or PDF files.
-3. Submit the report.
-4. Observe the neutral report container generated in `#reports` with an automatic investigation thread.
-5. Watch the thread as Switch orchestrates the 3 phases in real time:
+1. **Configure Server Settings:** Run `/settings` in any server channel to open the Reports configuration modal:
+   - Select the **Report Channel** for incoming reports.
+   - (Optional) Select an **Action Log Channel** for moderation audit logs.
+   - Toggle **Require Evidence** to enforce proof before moderation actions can be executed.
+2. **Submit a Report:** In any Discord server channel, right-click any message -> **Apps** -> **Report Message**.
+3. **Modal Intake:** Enter a detailed reason (15 to 1,000 characters) and optionally upload evidence screenshots or PDF files.
+4. **Automated Multi-Agent Review:** Watch the thread as Switch orchestrates the 3 phases in real time:
    - Progress container announces active agent work.
    - Phase 1 delivers Triage findings.
    - Phase 2 delivers Evidence Forensics.
    - Phase 3 delivers Moderation Advisor recommendation with action buttons.
-6. A moderator clicks any action button (`Warn`, `Timeout`, `Kick`, `Ban`, or `Dismiss`).
-7. Verity validates moderator permissions and role hierarchy, executes the action, updates the container to Emerald Green, and notifies the Switch room.
+5. **Human Moderator Authorization:** A moderator clicks any action button (`Warn`, `Timeout`, `Kick`, `Ban`, or `Dismiss`).
+   - If **Require Evidence** is enabled and the report lacks evidence, Verity presents an interactive confirmation modal requiring proof before completion.
+6. **Execution & Auditing:** Verity validates moderator permissions and role hierarchy, executes the action, updates the container in place to Emerald Green, sends an audit log to the Action Log Channel, and notifies the Switch room.
 
 ---
 

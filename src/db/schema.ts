@@ -71,4 +71,12 @@ CREATE TABLE IF NOT EXISTS moderation_resolutions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_resolutions_report ON moderation_resolutions(report_id);
+
+CREATE TABLE IF NOT EXISTS guild_settings (
+  guild_id TEXT PRIMARY KEY,
+  reports_channel_id TEXT,
+  action_log_channel_id TEXT,
+  require_evidence INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
 `;

@@ -1,5 +1,6 @@
 import { REST, Routes } from 'discord.js';
 import { reportCommandData } from './commands/reportCommand.js';
+import { settingsCommandData } from './commands/settingsCommand.js';
 import { config } from '../config.js';
 
 export async function registerCommands(): Promise<void> {
@@ -9,24 +10,25 @@ export async function registerCommands(): Promise<void> {
   }
 
   const rest = new REST({ version: '10' }).setToken(config.discordToken);
+  const commands = [reportCommandData, settingsCommandData];
 
   try {
-    console.log('[Verity] Registering Discord context menu command ("Report Message")...');
+    console.log('[Verity] Registering Discord application commands ("Report Message", "/settings")...');
 
     if (config.discordGuildId) {
       await rest.put(
         Routes.applicationGuildCommands(config.discordClientId, config.discordGuildId),
-        { body: [reportCommandData] }
+        { body: commands }
       );
-      console.log(`[Verity] Successfully registered context menu command to guild ${config.discordGuildId}.`);
+      console.log(`[Verity] Successfully registered application commands to guild ${config.discordGuildId}.`);
     } else {
       await rest.put(
         Routes.applicationCommands(config.discordClientId),
-        { body: [reportCommandData] }
+        { body: commands }
       );
-      console.log('[Verity] Successfully registered global context menu command.');
+      console.log('[Verity] Successfully registered global application commands.');
     }
   } catch (err) {
-    console.error('[Verity] Failed to register context menu command:', err);
+    console.error('[Verity] Failed to register application commands:', err);
   }
 }

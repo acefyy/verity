@@ -3,8 +3,11 @@ import {
   TextChannel,
   ThreadAutoArchiveDuration,
   AttachmentBuilder,
+  GuildMember,
+  PermissionFlagsBits,
   MessageFlags
 } from 'discord.js';
+import { createHash } from 'node:crypto';
 import { db } from '../../db/database.js';
 import {
   AttachmentInput,
@@ -17,52 +20,10 @@ import {
 } from '../components/reportContainerBuilder.js';
 import { runInvestigation } from '../../investigation/orchestrator.js';
 import { config } from '../../config.js';
+import { getModalInputValue } from './modalParsers.js';
+import { executeModerationResolution } from './actionExecution.js';
 
-/**
- * Robust helper to extract a text input value from a modal submission,
- * checking both discord.js helpers and recursively inspecting raw components
- * (handling inputs wrapped inside ComponentType.LABEL 18).
- */
-export function getModalInputValue(
-  interaction: ModalSubmitInteraction,
-  customId: string
-): string {
-  // 1. Try discord.js fields helper
-  try {
-    const val = interaction.fields.getTextInputValue(customId);
-    if (val) return val.trim();
-  } catch {
-    // Continue to raw inspection
-  }
-
-  // 2. Direct recursive search in raw interaction data
-  const rawComponents = (interaction as any).data?.components;
-  if (Array.isArray(rawComponents)) {
-    const findValue = (comps: any[]): string | undefined => {
-      for (const item of comps) {
-        if (item.custom_id === customId && typeof item.value === 'string') {
-          return item.value.trim();
-        }
-        if (item.component) {
-          const nested = findValue([item.component]);
-          if (nested !== undefined) return nested;
-        }
-        if (Array.isArray(item.components)) {
-          const nested = findValue(item.components);
-          if (nested !== undefined) return nested;
-        }
-      }
-      return undefined;
-    };
-
-    const found = findValue(rawComponents);
-    if (found !== undefined) {
-      return found;
-    }
-  }
-
-  return '';
-}
+export { getModalInputValue };
 
 /**
  * Extracts uploaded attachments from modal interaction payload.
@@ -102,7 +63,7 @@ export async function handleReportModalSubmit(
 
   const sessionId = customId.slice(prefix.length);
 
-  // Immediate ephemeral deferral to prevent 3-second timeout during attachment downloads
+  // Immediate ephemeral deferral to prevent timeout during attachment processing
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   // 1. Atomically validate and consume the server-side intake session
@@ -120,7 +81,7 @@ export async function handleReportModalSubmit(
     return;
   }
 
-  // 2. Extract and validate Reason input (handles Label wrapping)
+  // 2. Extract and validate Reason input
   const reason = getModalInputValue(interaction, 'verity:field:reason');
 
   if (!reason || reason.length < 15 || reason.length > 1000) {
@@ -153,28 +114,45 @@ export async function handleReportModalSubmit(
     channelId: session.channelId,
     messageId: session.targetMessageId,
     messageLink,
-    reportedUserId: session.reportedUserId, // strictly bound from intake session
+    reportedUserId: session.reportedUserId,
     reporterId: session.reporterId,
     reason,
     status: 'submitted'
   });
 
-  // 6. Find #reports channel
+  // 6. Resolve #reports channel from per-guild settings or environment fallback
+  const settings = db.getGuildSettings(session.guildId);
+  const targetReportsChannelId = settings.reportsChannelId || config.reportsChannelId;
+
   let reportsChannel: TextChannel | null = null;
-  try {
-    const channel = await interaction.client.channels.fetch(config.reportsChannelId);
-    if (channel && channel.isTextBased() && !channel.isDMBased()) {
-      reportsChannel = channel as TextChannel;
+  if (targetReportsChannelId) {
+    try {
+      const channel = await interaction.client.channels.fetch(targetReportsChannelId).catch(() => null);
+      if (channel && channel.isTextBased() && !channel.isDMBased()) {
+        reportsChannel = channel as TextChannel;
+      }
+    } catch (err: any) {
+      console.error(`[Verity] Failed to fetch reports channel (${targetReportsChannelId}):`, err?.message);
     }
-  } catch (err) {
-    console.error(`[Verity] Failed to fetch reports channel (${config.reportsChannelId}):`, err);
   }
 
   if (!reportsChannel) {
     await interaction.editReply({
-      content: `⚠️ Report \`${report.reportCode}\` recorded in database, but designated #reports channel is unconfigured or unreachable.`
+      content: `⚠️ Report \`${report.reportCode}\` recorded, but the designated #reports channel is missing or unconfigured. Please ask an administrator to run \`/settings\`.`
     });
     return;
+  }
+
+  // Check bot permissions in reports channel
+  const botMember = interaction.guild?.members.me;
+  if (botMember) {
+    const perms = reportsChannel.permissionsFor(botMember);
+    if (!perms?.has(PermissionFlagsBits.SendMessages) || !perms?.has(PermissionFlagsBits.ViewChannel)) {
+      await interaction.editReply({
+        content: `❌ Verity lacks permission to send messages in the designated reports channel (<#${reportsChannel.id}>). Please contact a server administrator.`
+      });
+      return;
+    }
   }
 
   // 7. Prepare immediate re-upload file attachments (zero local disk persistence)
@@ -202,7 +180,6 @@ export async function handleReportModalSubmit(
   } catch (err: any) {
     console.warn('[Verity] Notice: Components V2 send failed, attempting clean fallback:', err?.message);
     try {
-      // Fallback if guild lacks Components V2 rendering flags
       reportMessage = await reportsChannel.send({
         content: `### 🛡️ Report \`${report.reportCode}\` • Pending Investigation\n**Reported Member:** <@${report.reportedUserId}> (\`${report.reportedUserId}\`)\n**Reporter:** <@${report.reporterId}>\n**Channel:** <#${report.channelId}>\n**Message Link:** [Jump to Message](${report.messageLink})\n> **Alleged Reason:**\n> ${report.reason}${evidenceError ? `\n⚠️ **Evidence Notice:** ${evidenceError}` : ''}`,
         files: discordFileAttachments
@@ -254,7 +231,6 @@ export async function handleReportModalSubmit(
         components: threadInitialMsg.components
       });
     } catch {
-      // Fallback text if Components V2 flag rejected in thread
       initialMsg = await thread.send({
         content: `### 📋 Investigation Thread: Report \`${report.reportCode}\`\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`Awaiting Agent Triage & Analysis\``
       });
@@ -301,4 +277,99 @@ export async function handleReportModalSubmit(
       console.error(`[Verity] Uncaught error during investigation of report ${report.reportCode}:`, err);
     });
   }
+}
+
+/**
+ * Handles submission of the Action Evidence & Confirmation modal
+ * when evidence is required for moderation actions.
+ */
+export async function handleActionEvidenceModalSubmit(
+  interaction: ModalSubmitInteraction
+): Promise<void> {
+  const prefix = 'verity:modal:action_evidence:';
+  if (!interaction.customId.startsWith(prefix)) {
+    return;
+  }
+
+  const parts = interaction.customId.slice(prefix.length).split(':');
+  if (parts.length < 2) {
+    return;
+  }
+
+  const action = parts[0].toLowerCase();
+  const reportId = parts[1];
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const report = db.getReportById(reportId);
+  if (!report) {
+    await interaction.editReply({
+      content: '❌ Report record not found in database.'
+    });
+    return;
+  }
+
+  const existingResolution = db.getModerationResolution(report.id);
+  if (existingResolution || report.status === 'resolved') {
+    await interaction.editReply({
+      content: `ℹ️ Report \`${report.reportCode}\` has already been resolved by <@${existingResolution?.moderatorId || 'a moderator'}>.`
+    });
+    return;
+  }
+
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.editReply({
+      content: '❌ Actions can only be performed within a server.'
+    });
+    return;
+  }
+
+  const moderatorMember = interaction.member as GuildMember;
+  if (!moderatorMember) {
+    await interaction.editReply({
+      content: '❌ Could not verify your member profile.'
+    });
+    return;
+  }
+
+  const settings = db.getGuildSettings(guild.id);
+  const evidenceList = db.getEvidenceByReportId(report.id);
+  const hasReportEvidence = evidenceList.length > 0;
+
+  const moderatorEvidence = getModalInputValue(interaction, 'verity:field:action_evidence');
+  const customReason = getModalInputValue(interaction, 'verity:field:action_reason');
+
+  // If evidence is required and report has no attached evidence, moderator MUST supply evidence
+  if (settings.requireEvidence && action !== 'dismiss') {
+    if (!hasReportEvidence && (!moderatorEvidence || moderatorEvidence.trim().length < 10)) {
+      await interaction.editReply({
+        content: '🚫 Action blocked: Server policy requires proof/evidence before executing moderation actions. Please provide evidence details or links (at least 10 characters).'
+      });
+      return;
+    }
+  }
+
+  // If moderator provided evidence text or link, record it in database
+  if (moderatorEvidence && moderatorEvidence.trim().length > 0) {
+    const trimmedEvidence = moderatorEvidence.trim();
+    db.addEvidenceMetadata({
+      reportId: report.id,
+      filename: 'moderator_proof_statement.txt',
+      detectedMimeType: 'text/plain',
+      sizeBytes: Buffer.byteLength(trimmedEvidence, 'utf8'),
+      sha256Hash: createHash('sha256').update(trimmedEvidence).digest('hex'),
+      discordCdnUrl: trimmedEvidence.startsWith('http') ? trimmedEvidence : report.messageLink
+    });
+  }
+
+  await executeModerationResolution({
+    interaction,
+    report,
+    action,
+    moderatorMember,
+    guild,
+    customReason: customReason || undefined,
+    moderatorEvidence: moderatorEvidence || undefined
+  });
 }

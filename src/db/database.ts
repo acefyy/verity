@@ -66,6 +66,14 @@ export interface EvidenceMetadata {
   createdAt: number;
 }
 
+export interface GuildSettings {
+  guildId: string;
+  reportsChannelId: string;
+  actionLogChannelId: string | null;
+  requireEvidence: boolean;
+  updatedAt: number;
+}
+
 export class Database {
   private db: DatabaseSync;
 
@@ -99,6 +107,66 @@ export class Database {
 
   public close(): void {
     this.db.close();
+  }
+
+  // --- Guild Settings ---
+
+  public getGuildSettings(guildId: string): GuildSettings {
+    const stmt = this.db.prepare('SELECT * FROM guild_settings WHERE guild_id = ?');
+    const row = stmt.get(guildId) as any;
+    if (!row) {
+      return {
+        guildId,
+        reportsChannelId: config.reportsChannelId,
+        actionLogChannelId: null,
+        requireEvidence: false,
+        updatedAt: Date.now()
+      };
+    }
+    return {
+      guildId: row.guild_id,
+      reportsChannelId: row.reports_channel_id || config.reportsChannelId,
+      actionLogChannelId: row.action_log_channel_id || null,
+      requireEvidence: row.require_evidence === 1,
+      updatedAt: row.updated_at
+    };
+  }
+
+  public upsertGuildSettings(params: {
+    guildId: string;
+    reportsChannelId: string;
+    actionLogChannelId?: string | null;
+    requireEvidence: boolean;
+  }): GuildSettings {
+    const now = Date.now();
+    const actionLogChannelId = params.actionLogChannelId ?? null;
+    const requireEvidenceInt = params.requireEvidence ? 1 : 0;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO guild_settings (guild_id, reports_channel_id, action_log_channel_id, require_evidence, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(guild_id) DO UPDATE SET
+        reports_channel_id = excluded.reports_channel_id,
+        action_log_channel_id = excluded.action_log_channel_id,
+        require_evidence = excluded.require_evidence,
+        updated_at = excluded.updated_at
+    `);
+
+    stmt.run(
+      params.guildId,
+      params.reportsChannelId,
+      actionLogChannelId,
+      requireEvidenceInt,
+      now
+    );
+
+    return {
+      guildId: params.guildId,
+      reportsChannelId: params.reportsChannelId,
+      actionLogChannelId,
+      requireEvidence: params.requireEvidence,
+      updatedAt: now
+    };
   }
 
   // --- Intake Sessions ---
