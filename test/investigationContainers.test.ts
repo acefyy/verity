@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildPhaseProgressContainer,
   buildPhase1Container,
   buildPhase2Container,
   buildPhase3Container,
@@ -25,6 +26,20 @@ describe('Investigation Components V2 Container Specifications', () => {
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
+
+  test('Phase progress container shows active agent and description in neutral container', () => {
+    const payload = buildPhaseProgressContainer(1, 'report-triage', 'Evaluating urgency and policy category...');
+
+    assert.equal(payload.flags, IS_COMPONENTS_V2);
+    const container = payload.components[0];
+    assert.equal(container.type, 17);
+    assert.equal(container.accent_color, undefined);
+
+    const textComp = container.components[0];
+    assert.equal(textComp.type, 10);
+    assert.ok(textComp.content.includes('@report-triage is working...'));
+    assert.ok(textComp.content.includes('Phase 1: Report Triage'));
+  });
 
   test('Phase 1 container uses type 10 (TEXT_DISPLAY) and is neutral without decorative accent color', () => {
     const payload = buildPhase1Container(mockReport, 'Severity: Medium. Urgency: Normal.');

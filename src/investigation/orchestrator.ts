@@ -2,6 +2,7 @@ import { Client, TextChannel, ThreadChannel } from 'discord.js';
 import { db, Report } from '../db/database.js';
 import { switchClient } from '../switch/switchClient.js';
 import {
+  buildPhaseProgressContainer,
   buildPhase1Container,
   buildPhase2Container,
   buildPhase3Container,
@@ -49,6 +50,11 @@ async function updateThreadInitialStatus(
 /**
  * Orchestrates the full 3-agent investigation workflow in Switch
  * and synchronizes findings back into the Discord investigation thread.
+ *
+ * For each phase:
+ * 1. Sends an initial progress status ("@agent is working...")
+ * 2. Waits for the Switch agent response (with 120s timeout & TL;DR formatting constraints)
+ * 3. Edits that message in place to display the final response container
  */
 export async function runInvestigation(context: InvestigationContext): Promise<void> {
   const { report, thread, client } = context;
@@ -143,15 +149,27 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   });
 
   // Step 4: Phase 1 — Report Triage
-  console.log(`[Verity Orchestrator] Dispatching to @report-triage...`);
+  console.log(`[Verity Orchestrator] Starting Phase 1 (@report-triage)...`);
+  const p1ProgressMsg = await postThreadSafe(
+    thread,
+    buildPhaseProgressContainer(1, 'report-triage', 'Evaluating urgency, policy violation category, and evidence gaps...')
+  );
+
   let triageResponse: string;
   try {
     const triagePrompt =
-      `@report-triage Please triage this case for Report ${report.reportCode}.\n` +
-      `Assess urgency, policy category, severity (Low/Medium/High/Critical), and what evidence needs verification.`;
+      `@report-triage Please triage Report ${report.reportCode}.\n\n` +
+      `FORMATTING INSTRUCTIONS:\n` +
+      `- Always begin with a concise "**TL;DR:**" (1-2 sentences summarizing urgency and violation category).\n` +
+      `- Keep your entire response compact, structured, and under 1,200 characters using bullet points:\n` +
+      `  • **Violation Category:** [Category]\n` +
+      `  • **Severity & Urgency:** [Level]\n` +
+      `  • **Evidence Available:** [Status]\n` +
+      `  • **Missing Information:** [Key gaps]\n` +
+      `- Be direct and concise without repetitive preambles.`;
 
     const sent = await switchClient.sendMessage(roomId, triagePrompt, switchClient.agentTriageId);
-    triageResponse = await switchClient.waitForAgentResponse(roomId, 'triage', sent.seq, 75000);
+    triageResponse = await switchClient.waitForAgentResponse(roomId, 'triage', sent.seq, 120000);
 
     db.addInvestigationMilestone({
       reportId: report.id,
@@ -160,27 +178,59 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
       content: triageResponse
     });
 
-    await postThreadSafe(thread, buildPhase1Container(report, triageResponse));
-    console.log(`[Verity Orchestrator] Phase 1 (Triage) posted to Discord.`);
+    const p1Payload = buildPhase1Container(report, triageResponse);
+    if (p1ProgressMsg) {
+      await p1ProgressMsg.edit({
+        flags: p1Payload.flags,
+        components: p1Payload.components
+      }).catch(async () => {
+        await postThreadSafe(thread, p1Payload);
+      });
+    } else {
+      await postThreadSafe(thread, p1Payload);
+    }
+    console.log(`[Verity Orchestrator] Phase 1 (Triage) delivered and edited in place.`);
   } catch (err: any) {
     console.error(`[Verity Orchestrator] Triage phase failed:`, err);
-    await postThreadSafe(
-      thread,
-      buildInvestigationErrorContainer(report.reportCode, `Triage agent encountered an issue: ${err.message}`)
+    const errPayload = buildInvestigationErrorContainer(
+      report.reportCode,
+      `Triage agent encountered an issue: ${err.message}`
     );
+    if (p1ProgressMsg) {
+      await p1ProgressMsg.edit({
+        flags: errPayload.flags,
+        components: errPayload.components
+      }).catch(async () => {
+        await postThreadSafe(thread, errPayload);
+      });
+    } else {
+      await postThreadSafe(thread, errPayload);
+    }
     triageResponse = `[Triage agent timed out or unreachable: ${err.message}]`;
   }
 
   // Step 5: Phase 2 — Evidence Forensics
-  console.log(`[Verity Orchestrator] Dispatching to @report-investigator...`);
+  console.log(`[Verity Orchestrator] Starting Phase 2 (@report-investigator)...`);
+  const p2ProgressMsg = await postThreadSafe(
+    thread,
+    buildPhaseProgressContainer(2, 'report-investigator', 'Auditing reported message, channel context, and verifying claims...')
+  );
+
   let investigatorResponse: string;
   try {
     const invPrompt =
-      `@report-investigator Please conduct the forensic investigation for Report ${report.reportCode}.\n` +
-      `Analyze the target message, context, and proof files. State verified facts versus unverified claims, and note any investigative limitations.`;
+      `@report-investigator Please conduct the forensic evidence review for Report ${report.reportCode}.\n\n` +
+      `FORMATTING INSTRUCTIONS:\n` +
+      `- Always begin with a concise "**TL;DR:**" (1-2 sentences stating verified facts versus unverified claims).\n` +
+      `- Keep your entire report compact, structured, and under 1,500 characters using bullet points:\n` +
+      `  • **Evidence Reviewed:** [Messages, proof files]\n` +
+      `  • **Verified Facts:** [Confirmed points]\n` +
+      `  • **Unverified Claims & Limitations:** [What cannot be corroborated]\n` +
+      `  • **Forensic Confidence:** [Confirmed / Inconclusive / Unsubstantiated]\n` +
+      `- Never invent facts. Be analytical and concise.`;
 
     const sent = await switchClient.sendMessage(roomId, invPrompt, switchClient.agentInvestigatorId);
-    investigatorResponse = await switchClient.waitForAgentResponse(roomId, 'investigator', sent.seq, 75000);
+    investigatorResponse = await switchClient.waitForAgentResponse(roomId, 'investigator', sent.seq, 120000);
 
     db.addInvestigationMilestone({
       reportId: report.id,
@@ -189,27 +239,59 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
       content: investigatorResponse
     });
 
-    await postThreadSafe(thread, buildPhase2Container(report, investigatorResponse));
-    console.log(`[Verity Orchestrator] Phase 2 (Investigator) posted to Discord.`);
+    const p2Payload = buildPhase2Container(report, investigatorResponse);
+    if (p2ProgressMsg) {
+      await p2ProgressMsg.edit({
+        flags: p2Payload.flags,
+        components: p2Payload.components
+      }).catch(async () => {
+        await postThreadSafe(thread, p2Payload);
+      });
+    } else {
+      await postThreadSafe(thread, p2Payload);
+    }
+    console.log(`[Verity Orchestrator] Phase 2 (Investigator) delivered and edited in place.`);
   } catch (err: any) {
     console.error(`[Verity Orchestrator] Investigator phase failed:`, err);
-    await postThreadSafe(
-      thread,
-      buildInvestigationErrorContainer(report.reportCode, `Investigator agent encountered an issue: ${err.message}`)
+    const errPayload = buildInvestigationErrorContainer(
+      report.reportCode,
+      `Investigator agent encountered an issue: ${err.message}`
     );
+    if (p2ProgressMsg) {
+      await p2ProgressMsg.edit({
+        flags: errPayload.flags,
+        components: errPayload.components
+      }).catch(async () => {
+        await postThreadSafe(thread, errPayload);
+      });
+    } else {
+      await postThreadSafe(thread, errPayload);
+    }
     investigatorResponse = `[Investigator agent timed out or unreachable: ${err.message}]`;
   }
 
   // Step 6: Phase 3 — Moderation Advisor
-  console.log(`[Verity Orchestrator] Dispatching to @moderation-advisor...`);
+  console.log(`[Verity Orchestrator] Starting Phase 3 (@moderation-advisor)...`);
+  const p3ProgressMsg = await postThreadSafe(
+    thread,
+    buildPhaseProgressContainer(3, 'moderation-advisor', 'Synthesizing triage, forensic audit, and community guidelines...')
+  );
+
   let advisorResponse: string;
   try {
     const advPrompt =
-      `@moderation-advisor Based on the triage assessment and investigator findings for Report ${report.reportCode}, provide your final moderation recommendation.\n` +
-      `Specify recommended action (Dismiss, Warn, Timeout, or Ban), policy justification, and mitigating factors.`;
+      `@moderation-advisor Synthesize the triage assessment and investigator findings for Report ${report.reportCode}.\n\n` +
+      `FORMATTING INSTRUCTIONS:\n` +
+      `- Always begin with a concise "**TL;DR:**" (1-2 sentences stating your recommended action: Dismiss, Warn, Timeout/Mute, Kick, or Ban).\n` +
+      `- Keep your entire recommendation compact, structured, and under 1,200 characters using bullet points:\n` +
+      `  • **Recommended Action:** [Dismiss / Warn / Timeout / Kick / Ban]\n` +
+      `  • **Policy Justification:** [Proportionality and rule rationale]\n` +
+      `  • **Mitigating / Aggravating Factors:** [Context]\n` +
+      `  • **Directive for Human Moderator:** [Final step]\n` +
+      `- Be direct, authoritative, and concise.`;
 
     const sent = await switchClient.sendMessage(roomId, advPrompt, switchClient.agentAdvisorId);
-    advisorResponse = await switchClient.waitForAgentResponse(roomId, 'advisor', sent.seq, 75000);
+    advisorResponse = await switchClient.waitForAgentResponse(roomId, 'advisor', sent.seq, 120000);
 
     db.addInvestigationMilestone({
       reportId: report.id,
@@ -220,26 +302,39 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
 
     db.updateReportStatus(report.id, 'awaiting_human_action');
 
-    // Post Phase 3 with interactive human decision buttons!
-    await postThreadSafe(thread, buildPhase3Container(report, advisorResponse));
+    // Edit Phase 3 message in place with interactive human decision buttons!
+    const p3Payload = buildPhase3Container(report, advisorResponse);
+    if (p3ProgressMsg) {
+      await p3ProgressMsg.edit({
+        flags: p3Payload.flags,
+        components: p3Payload.components
+      }).catch(async () => {
+        await postThreadSafe(thread, p3Payload);
+      });
+    } else {
+      await postThreadSafe(thread, p3Payload);
+    }
+
     await updateThreadInitialStatus(thread, report, '⚖️ Awaiting Moderator Action');
-    console.log(`[Verity Orchestrator] Phase 3 (Advisor) posted to Discord with interactive buttons.`);
+    console.log(`[Verity Orchestrator] Phase 3 (Advisor) delivered and edited in place with interactive buttons.`);
   } catch (err: any) {
     console.error(`[Verity Orchestrator] Advisor phase failed:`, err);
-    await postThreadSafe(
-      thread,
-      buildInvestigationErrorContainer(report.reportCode, `Advisor agent encountered an issue: ${err.message}`)
-    );
-
-    // Fallback: Still display interactive buttons so human moderator can take action!
     db.updateReportStatus(report.id, 'awaiting_human_action');
-    await postThreadSafe(
-      thread,
-      buildPhase3Container(
-        report,
-        `⚠️ Advisor timed out. Human moderator review required directly based on prior phases.`
-      )
+
+    const fallbackPayload = buildPhase3Container(
+      report,
+      `⚠️ Advisor agent encountered a delay (${err.message}). Human moderator review can proceed directly using the findings above.`
     );
+    if (p3ProgressMsg) {
+      await p3ProgressMsg.edit({
+        flags: fallbackPayload.flags,
+        components: fallbackPayload.components
+      }).catch(async () => {
+        await postThreadSafe(thread, fallbackPayload);
+      });
+    } else {
+      await postThreadSafe(thread, fallbackPayload);
+    }
     await updateThreadInitialStatus(thread, report, '⚖️ Awaiting Moderator Action');
   }
 }

@@ -223,7 +223,7 @@ export class SwitchClient {
     roomId: string,
     agentNameFilter: string,
     afterSeq: number,
-    timeoutMs: number = 60000,
+    timeoutMs: number = 120000,
     pollIntervalMs: number = 2500
   ): Promise<string> {
     await this.ensureAuth();

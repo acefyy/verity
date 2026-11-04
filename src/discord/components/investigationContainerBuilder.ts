@@ -11,6 +11,39 @@ function sanitizeContent(text: string, maxLength: number = 3800): string {
 }
 
 /**
+ * Neutral Components V2 container displayed while an agent is actively working.
+ * This message is subsequently edited in place once the agent delivers its findings.
+ */
+export function buildPhaseProgressContainer(
+  phaseNumber: number,
+  agentName: string,
+  activityDescription: string
+) {
+  const titles: Record<number, string> = {
+    1: '🧭 Phase 1: Report Triage',
+    2: '🔍 Phase 2: Evidence Forensics',
+    3: '⚖️ Phase 3: Moderation Advisor'
+  };
+
+  return {
+    flags: IS_COMPONENTS_V2,
+    components: [
+      {
+        type: 17, // Container
+        components: [
+          {
+            type: 10, // Text Display
+            content: `### ${titles[phaseNumber] || 'Investigation Step'}\n\n` +
+              `⏳ **@${agentName} is working...**\n` +
+              `*${activityDescription}*`
+          }
+        ]
+      }
+    ]
+  };
+}
+
+/**
  * Neutral Components V2 container for Phase 1: Report Triage
  */
 export function buildPhase1Container(report: Report, triageContent: string) {
