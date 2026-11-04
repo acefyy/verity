@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Events, MessageFlags } from 'discord.js';
 import { handleReportContextMenu } from './interactions/contextMenuHandler.js';
 import { handleReportModalSubmit } from './interactions/modalSubmitHandler.js';
 import { handleActionButton } from './interactions/actionButtonHandler.js';
@@ -35,7 +35,7 @@ export function createDiscordClient(): Client {
       if (interaction.isRepliable()) {
         const errorMsg = {
           content: '❌ An unexpected error occurred while processing this report.',
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         };
         if (interaction.deferred || interaction.replied) {
           await interaction.followUp(errorMsg).catch(() => {});

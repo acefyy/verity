@@ -2,7 +2,8 @@ import {
   ButtonInteraction,
   GuildMember,
   PermissionFlagsBits,
-  TextChannel
+  TextChannel,
+  MessageFlags
 } from 'discord.js';
 import { db } from '../../db/database.js';
 import { switchClient } from '../../switch/switchClient.js';
@@ -33,7 +34,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
   const reportId = parts[1];
 
   // Defer reply ephemerally to ensure fast interaction handling
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const report = db.getReportById(reportId);
   if (!report) {

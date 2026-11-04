@@ -1,4 +1,4 @@
-import { MessageContextMenuCommandInteraction } from 'discord.js';
+import { MessageContextMenuCommandInteraction, MessageFlags } from 'discord.js';
 import { db } from '../../db/database.js';
 import { buildReportModal } from '../components/modalBuilder.js';
 
@@ -12,7 +12,7 @@ export async function handleReportContextMenu(
   if (!guildId || !channelId || !targetMessage) {
     await interaction.reply({
       content: '❌ Reports can only be submitted for messages within a server channel.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return;
   }

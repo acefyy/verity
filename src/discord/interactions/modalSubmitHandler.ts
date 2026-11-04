@@ -2,7 +2,8 @@ import {
   ModalSubmitInteraction,
   TextChannel,
   ThreadAutoArchiveDuration,
-  AttachmentBuilder
+  AttachmentBuilder,
+  MessageFlags
 } from 'discord.js';
 import { db } from '../../db/database.js';
 import {
@@ -102,7 +103,7 @@ export async function handleReportModalSubmit(
   const sessionId = customId.slice(prefix.length);
 
   // Immediate ephemeral deferral to prevent 3-second timeout during attachment downloads
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   // 1. Atomically validate and consume the server-side intake session
   let session;
@@ -236,7 +237,9 @@ export async function handleReportModalSubmit(
   }
 
   // 10. Create dedicated investigation thread under the report message
-  let thread;
+  let thread: any = null;
+  let initialMsg: any = null;
+
   try {
     thread = await reportMessage.startThread({
       name: `Report ${report.reportCode} — Investigation`,
@@ -245,7 +248,6 @@ export async function handleReportModalSubmit(
     });
 
     const threadInitialMsg = buildThreadInitialContainer(report);
-    let initialMsg;
     try {
       initialMsg = await thread.send({
         flags: threadInitialMsg.flags,
