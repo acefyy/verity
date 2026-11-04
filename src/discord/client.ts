@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { handleReportContextMenu } from './interactions/contextMenuHandler.js';
 import { handleReportModalSubmit } from './interactions/modalSubmitHandler.js';
+import { handleActionButton } from './interactions/actionButtonHandler.js';
 
 export function createDiscordClient(): Client {
   const client = new Client({
@@ -23,6 +24,10 @@ export function createDiscordClient(): Client {
       } else if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith('verity:modal:report:')) {
           await handleReportModalSubmit(interaction);
+        }
+      } else if (interaction.isButton()) {
+        if (interaction.customId.startsWith('verity:act:')) {
+          await handleActionButton(interaction);
         }
       }
     } catch (err) {

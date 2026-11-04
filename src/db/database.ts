@@ -29,8 +29,28 @@ export interface Report {
   status: string;
   discordReportsMsgId?: string | null;
   discordThreadId?: string | null;
+  switchRoomId?: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface InvestigationMilestone {
+  id: string;
+  reportId: string;
+  phase: string;
+  agentName: string;
+  content: string;
+  completedAt: number;
+}
+
+export interface ModerationResolution {
+  id: string;
+  reportId: string;
+  moderatorId: string;
+  actionTaken: string;
+  officialReason: string;
+  targetUserId: string;
+  executedAt: number;
 }
 
 export interface EvidenceMetadata {
@@ -62,6 +82,13 @@ export class Database {
       // Ignore if in-memory or unsupported
     }
     this.db.exec(SCHEMA_SQL);
+
+    // Ensure backwards compatibility with any existing DB files missing switch_room_id
+    try {
+      this.db.exec('ALTER TABLE reports ADD COLUMN switch_room_id TEXT;');
+    } catch {
+      // Column already exists
+    }
   }
 
   public close(): void {
@@ -251,6 +278,29 @@ export class Database {
     stmt.run(discordReportsMsgId, discordThreadId, now, reportId);
   }
 
+  public updateReportStatus(
+    reportId: string,
+    status: string,
+    switchRoomId?: string | null
+  ): void {
+    const now = Date.now();
+    if (switchRoomId !== undefined) {
+      const stmt = this.db.prepare(`
+        UPDATE reports
+        SET status = ?, switch_room_id = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run(status, switchRoomId, now, reportId);
+    } else {
+      const stmt = this.db.prepare(`
+        UPDATE reports
+        SET status = ?, updated_at = ?
+        WHERE id = ?
+      `);
+      stmt.run(status, now, reportId);
+    }
+  }
+
   public getReportById(reportId: string): Report | null {
     const stmt = this.db.prepare('SELECT * FROM reports WHERE id = ?');
     const row = stmt.get(reportId) as any;
@@ -263,6 +313,16 @@ export class Database {
     const row = stmt.get(reportCode) as any;
     if (!row) return null;
     return this.mapReportRow(row);
+  }
+
+  public getPendingReports(): Report[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM reports
+      WHERE status = 'submitted' AND discord_thread_id IS NOT NULL AND discord_thread_id != ''
+      ORDER BY created_at ASC
+    `);
+    const rows = stmt.all() as any[];
+    return rows.map((r) => this.mapReportRow(r));
   }
 
   // --- Evidence Metadata ---
@@ -330,6 +390,116 @@ export class Database {
     }));
   }
 
+  // --- Investigation Milestones ---
+
+  public addInvestigationMilestone(params: {
+    reportId: string;
+    phase: string;
+    agentName: string;
+    content: string;
+  }): InvestigationMilestone {
+    const id = randomUUID();
+    const now = Date.now();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO investigation_milestones (
+        id, report_id, phase, agent_name, content, completed_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      params.reportId,
+      params.phase,
+      params.agentName,
+      params.content,
+      now
+    );
+
+    return {
+      id,
+      reportId: params.reportId,
+      phase: params.phase,
+      agentName: params.agentName,
+      content: params.content,
+      completedAt: now
+    };
+  }
+
+  public getInvestigationMilestones(reportId: string): InvestigationMilestone[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM investigation_milestones
+      WHERE report_id = ?
+      ORDER BY completed_at ASC
+    `);
+    const rows = stmt.all(reportId) as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      reportId: r.report_id,
+      phase: r.phase,
+      agentName: r.agent_name,
+      content: r.content,
+      completedAt: r.completed_at
+    }));
+  }
+
+  // --- Moderation Resolutions ---
+
+  public recordModerationResolution(params: {
+    reportId: string;
+    moderatorId: string;
+    actionTaken: string;
+    officialReason: string;
+    targetUserId: string;
+  }): ModerationResolution {
+    const id = randomUUID();
+    const now = Date.now();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO moderation_resolutions (
+        id, report_id, moderator_id, action_taken,
+        official_reason, target_user_id, executed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      params.reportId,
+      params.moderatorId,
+      params.actionTaken,
+      params.officialReason,
+      params.targetUserId,
+      now
+    );
+
+    return {
+      id,
+      reportId: params.reportId,
+      moderatorId: params.moderatorId,
+      actionTaken: params.actionTaken,
+      officialReason: params.officialReason,
+      targetUserId: params.targetUserId,
+      executedAt: now
+    };
+  }
+
+  public getModerationResolution(reportId: string): ModerationResolution | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM moderation_resolutions WHERE report_id = ?
+    `);
+    const row = stmt.get(reportId) as any;
+    if (!row) return null;
+    return {
+      id: row.id,
+      reportId: row.report_id,
+      moderatorId: row.moderator_id,
+      actionTaken: row.action_taken,
+      officialReason: row.official_reason,
+      targetUserId: row.target_user_id,
+      executedAt: row.executed_at
+    };
+  }
+
   private mapReportRow(row: any): Report {
     return {
       id: row.id,
@@ -344,6 +514,7 @@ export class Database {
       status: row.status,
       discordReportsMsgId: row.discord_reports_msg_id,
       discordThreadId: row.discord_thread_id,
+      switchRoomId: row.switch_room_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };

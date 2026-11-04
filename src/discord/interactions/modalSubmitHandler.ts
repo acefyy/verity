@@ -14,6 +14,7 @@ import {
   buildReportContainer,
   buildThreadInitialContainer
 } from '../components/reportContainerBuilder.js';
+import { runInvestigation } from '../../investigation/orchestrator.js';
 import { config } from '../../config.js';
 
 /**
@@ -284,4 +285,15 @@ export async function handleReportModalSubmit(
   await interaction.editReply({
     content: `✅ Report \`${report.reportCode}\` submitted successfully. Our moderation team has been notified.`
   });
+
+  // 14. Trigger multi-agent investigation workflow in the background
+  if (thread) {
+    runInvestigation({
+      report,
+      thread,
+      client: interaction.client
+    }).catch((err) => {
+      console.error(`[Verity] Uncaught error during investigation of report ${report.reportCode}:`, err);
+    });
+  }
 }
