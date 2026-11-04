@@ -55,7 +55,7 @@ export function buildPhase1Container(report: Report, triageContent: string) {
         components: [
           {
             type: 10, // Text Display (type 10 in Components V2)
-            content: `### 🧭 Phase 1: Report Triage Assessment • Report \`${report.reportCode}\`\n\n${sanitizeContent(triageContent)}\n\n*— Assessed by Switch Agent \`report-triage\`*`
+            content: `### 🧭 Phase 1: Report Triage Assessment • Report \`${report.reportCode}\`\n\n${sanitizeContent(triageContent)}\n\n*Assessed by Switch Agent \`report-triage\`*`
           }
         ]
       }
@@ -75,7 +75,7 @@ export function buildPhase2Container(report: Report, investigatorContent: string
         components: [
           {
             type: 10, // Text Display (type 10 in Components V2)
-            content: `### 🔍 Phase 2: Evidence Forensics & Verification • Report \`${report.reportCode}\`\n\n${sanitizeContent(investigatorContent)}\n\n*— Investigated by Switch Agent \`report-investigator\`*`
+            content: `### 🔍 Phase 2: Evidence Forensics & Verification • Report \`${report.reportCode}\`\n\n${sanitizeContent(investigatorContent)}\n\n*Investigated by Switch Agent \`report-investigator\`*`
           }
         ]
       }
@@ -95,7 +95,7 @@ export function buildPhase3Container(
   const containerComponents: any[] = [
     {
       type: 10, // Text Display (type 10 in Components V2)
-      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${report.reportCode}\`\n\n${sanitizeContent(advisorContent)}\n\n*— Recommended by Switch Agent \`moderation-advisor\`*\n\n> 👤 **Human Decision Required:** Select an action below to authorize and enforce moderation.`
+      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${report.reportCode}\`\n\n${sanitizeContent(advisorContent)}\n\n*Recommended by Switch Agent \`moderation-advisor\`*\n\n> 👤 **Human Decision Required:** Select an action below to authorize and enforce moderation.`
     }
   ];
 
@@ -173,7 +173,7 @@ export function buildResolvedActionContainer(params: {
   if (params.advisorContent) {
     containerComponents.push({
       type: 10, // Text Display
-      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${params.report.reportCode}\`\n\n${sanitizeContent(params.advisorContent)}\n\n*— Recommended by Switch Agent \`moderation-advisor\`*`
+      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${params.report.reportCode}\`\n\n${sanitizeContent(params.advisorContent)}\n\n*Recommended by Switch Agent \`moderation-advisor\`*`
     });
     containerComponents.push({
       type: 14, // Separator

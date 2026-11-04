@@ -84,7 +84,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
         }
       } catch (err: any) {
         console.warn(`[Verity Orchestrator] Target message fetch failed (may be deleted or missing permission): ${err?.message}`);
-        targetMessageContent = '[Target message could not be fetched from Discord — it may have been deleted or bot lacks permission]';
+        targetMessageContent = '[Target message could not be fetched from Discord (it may have been deleted or bot lacks permission)]';
       }
 
       // Fetch preceding context
@@ -148,7 +148,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
     console.warn(`[Verity Orchestrator] Initial brief post notice: ${err?.message}`);
   });
 
-  // Step 4: Phase 1 — Report Triage
+  // Step 4: Phase 1: Report Triage
   console.log(`[Verity Orchestrator] Starting Phase 1 (@report-triage)...`);
   const p1ProgressMsg = await postThreadSafe(
     thread,
@@ -209,7 +209,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
     triageResponse = `[Triage agent timed out or unreachable: ${err.message}]`;
   }
 
-  // Step 5: Phase 2 — Evidence Forensics
+  // Step 5: Phase 2: Evidence Forensics
   console.log(`[Verity Orchestrator] Starting Phase 2 (@report-investigator)...`);
   const p2ProgressMsg = await postThreadSafe(
     thread,
@@ -270,7 +270,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
     investigatorResponse = `[Investigator agent timed out or unreachable: ${err.message}]`;
   }
 
-  // Step 6: Phase 3 — Moderation Advisor
+  // Step 6: Phase 3: Moderation Advisor
   console.log(`[Verity Orchestrator] Starting Phase 3 (@moderation-advisor)...`);
   const p3ProgressMsg = await postThreadSafe(
     thread,

@@ -242,7 +242,7 @@ export async function handleReportModalSubmit(
 
   try {
     thread = await reportMessage.startThread({
-      name: `Report ${report.reportCode} — Investigation`,
+      name: `Report ${report.reportCode}: Investigation`,
       autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
       reason: `Verity investigation thread for report ${report.reportCode}`
     });
@@ -256,7 +256,7 @@ export async function handleReportModalSubmit(
     } catch {
       // Fallback text if Components V2 flag rejected in thread
       initialMsg = await thread.send({
-        content: `### 📋 Investigation Thread — Report \`${report.reportCode}\`\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`Awaiting Agent Triage & Analysis\``
+        content: `### 📋 Investigation Thread: Report \`${report.reportCode}\`\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`Awaiting Agent Triage & Analysis\``
       });
     }
   } catch (err) {

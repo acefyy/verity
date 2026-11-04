@@ -115,7 +115,7 @@ export function buildThreadInitialContainer(report: Report, statusText?: string)
         components: [
           {
             type: 10, // TEXT_DISPLAY
-            content: `### 📋 Investigation Thread — Report \`${report.reportCode}\`\nThis thread records the multi-agent investigation, evidence review, and human moderator decisions.\n\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`${currentStatus}\``
+            content: `### 📋 Investigation Thread: Report \`${report.reportCode}\`\nThis thread records the multi-agent investigation, evidence review, and human moderator decisions.\n\n- **Target Member:** <@${report.reportedUserId}>\n- **Origin Message:** [Jump to Message](${report.messageLink})\n- **Status:** \`${currentStatus}\``
           }
         ]
       }

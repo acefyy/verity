@@ -153,7 +153,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
       // Attempt to DM the target member with a warning notice
       if (targetMember) {
         await targetMember.send({
-          content: `⚠️ **Verity Moderation Notice — ${guild.name}**\nAn official warning was issued to your account following an investigation of Report \`${report.reportCode}\`.\n> **Alleged Violation:** ${report.reason}\nPlease review server rules to prevent further moderation action.`
+          content: `⚠️ **Verity Moderation Notice: ${guild.name}**\nAn official warning was issued to your account following an investigation of Report \`${report.reportCode}\`.\n> **Alleged Violation:** ${report.reason}\nPlease review server rules to prevent further moderation action.`
         }).catch(() => {
           // Member DMs might be closed
         });
