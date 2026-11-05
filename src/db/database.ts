@@ -399,6 +399,13 @@ export class Database {
     return this.mapReportRow(row);
   }
 
+  public getReportByThreadId(threadId: string): Report | null {
+    const stmt = this.db.prepare('SELECT * FROM reports WHERE discord_thread_id = ?');
+    const row = stmt.get(threadId) as any;
+    if (!row) return null;
+    return this.mapReportRow(row);
+  }
+
   public getPendingReports(): Report[] {
     const stmt = this.db.prepare(`
       SELECT * FROM reports
@@ -582,6 +589,24 @@ export class Database {
       targetUserId: row.target_user_id,
       executedAt: row.executed_at
     };
+  }
+
+  public getResolutionsForUser(userId: string): ModerationResolution[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM moderation_resolutions
+      WHERE target_user_id = ?
+      ORDER BY executed_at DESC, rowid DESC
+    `);
+    const rows = stmt.all(userId) as any[];
+    return rows.map((row) => ({
+      id: row.id,
+      reportId: row.report_id,
+      moderatorId: row.moderator_id,
+      actionTaken: row.action_taken,
+      officialReason: row.official_reason,
+      targetUserId: row.target_user_id,
+      executedAt: row.executed_at
+    }));
   }
 
   private mapReportRow(row: any): Report {

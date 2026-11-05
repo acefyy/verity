@@ -25,6 +25,9 @@ Verity reimagines moderation as an institutional case management workflow:
 3. **Human Authorization & Execution:** AI agents never possess Discord punishment permissions. Verity enforces a strict two-tier permission and role-hierarchy check on the human moderator before executing actions (`Dismiss`, `Warn`, `Timeout`, `Kick`, `Ban`) directly via interactive Discord buttons.
 4. **Closed-Loop Audit Trail:** Final human decisions are updated in-place inside Discord threads and synchronized back to the Switch room, leaving an immutable record across both platforms.
 5. **Server Governance & Settings:** Dedicated `/settings` slash command with Channel Selects and Checkboxes to configure report routing, action audit log channels, and mandatory evidence enforcement.
+6. **Interactive Agent Q&A:** Moderators can ask clarifying follow-up questions to any Switch agent directly in the Discord report thread with live progress and in-place responses.
+7. **Pre-Action DM Notices:** Official direct message warnings and sanction notices are dispatched to target members prior to kick, ban, timeout, or warn enforcement.
+8. **Case Audit Export:** One-click downloadable Markdown incident audit transcript with full cryptographic SHA-256 evidence chain, chronological multi-agent timeline, and human moderator authorization records.
 
 ---
 
@@ -105,6 +108,20 @@ Verity reimagines moderation as an institutional case management workflow:
 - **Action Log Channel:** Sends formatted Components V2 audit logs to an authorized channel whenever moderation actions (`Warn`, `Timeout`, `Kick`, `Ban`, `Dismiss`) are completed.
 - **Graceful Fault Tolerance:** Gracefully handles missing channels, deleted channels, and insufficient bot permissions without crashing or halting moderation workflows.
 
+### 6. Interactive Agent Q&A & Contextual Inquiry
+- **Direct Thread Mentions:** Human moderators can interrogate Switch investigation agents directly within the Discord report thread using `@investigator`, `@triage`, `@advisor`, or bot mentions.
+- **Dynamic Switch Room Routing:** Questions are forwarded to the report's dedicated Switch case room, processed by the targeted agent, and rendered with real-time status transitions.
+- **Milestone Persistence:** Follow-up questions and agent explanations are stored in SQLite and included in subsequent case audit exports.
+
+### 7. Transparent Pre-Action Direct Messages
+- **Guaranteed Fair Notice:** Target members receive an official DM detailing the alleged violation, server name, and moderator reason before punitive actions (Timeout, Kick, Ban, Warn) take effect.
+- **Closed DM Resilience:** If a target member has direct messages disabled, the system catches the error gracefully, proceeds with the moderation action, and records the delivery state in the audit log.
+
+### 8. Case Audit Transcript Export & Recidivism Tracking
+- **One-Click Audit Dossier:** Moderators can click the "Export Case Audit" button on any resolved report to receive an instant, downloadable Markdown transcript (`verity_audit_<code\>.md`).
+- **Complete Chain of Custody:** The dossier aggregates report intake metadata, SHA-256 binary evidence checksums, all multi-agent milestones, and the human moderation authorization timestamp.
+- **Violation History Integration:** The investigation brief automatically injects the user's past disciplinary history from SQLite, giving Switch agents full context on repeat offenses.
+
 ---
 
 ## Switch Agent Specifications
@@ -147,16 +164,19 @@ verity/
 │   │       ├── modalParsers.ts                 # Channel Select, Checkbox and input extraction helpers
 │   │       ├── settingsHandler.ts              # /settings command and settings modal submission handler
 │   │       ├── actionButtonHandler.ts          # Moderator authorization, role hierarchy & action triggers
-│   │       └── actionExecution.ts              # Resolution execution, container edits & action logging
+│   │       ├── actionExecution.ts              # Resolution execution, container edits & action logging
+│   │       └── threadQAHandler.ts              # Interactive moderator thread Q&A with Switch agents
 │   ├── evidence/
 │   │   └── validator.ts                        # Magic byte inspection, SHA-256 & memory buffers
 │   ├── investigation/
-│   │   └── orchestrator.ts                     # Switch room lifecycle & 3-phase handoff coordinator
+│   │   ├── orchestrator.ts                     # Switch room lifecycle & 3-phase handoff coordinator
+│   │   └── auditExporter.ts                    # Incident audit dossier generator (Markdown)
 │   └── switch/
 │       └── switchClient.ts                     # Switch Gateway REST client & polling manager
 ├── test/
 │   ├── actionButtonHandler.test.ts             # Moderator authorization & resolution persistence
 │   ├── componentsV2.test.ts                    # Components V2 payload layout & styling
+│   ├── enhancedFeatures.test.ts                # Thread Q&A, audit exporter & disciplinary history
 │   ├── evidenceValidator.test.ts               # Magic byte checks, file bounds & path traversal safety
 │   ├── intakeFlowE2E.test.ts                   # Full end-to-end report lifecycle simulation
 │   ├── intakeSession.test.ts                   # Intake session creation, replay prevention & TTL
@@ -220,7 +240,7 @@ SWITCH_AGENT_ADVISOR_ID=9646eee2-cea5-436e-9aba-8a3a2040b1d7
 
 ### 3. Run Automated Tests
 
-Verity includes an extensive suite of 39 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, and server settings workflows:
+Verity includes an extensive suite of 44 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, and case audit export:
 
 ```bash
 npm test
@@ -228,9 +248,9 @@ npm test
 
 Expected output:
 ```
-ℹ tests 39
-ℹ suites 8
-ℹ pass 39
+ℹ tests 44
+ℹ suites 9
+ℹ pass 44
 ℹ fail 0
 ```
 

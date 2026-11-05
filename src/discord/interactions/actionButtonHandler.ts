@@ -2,11 +2,13 @@ import {
   ButtonInteraction,
   GuildMember,
   PermissionFlagsBits,
-  MessageFlags
+  MessageFlags,
+  AttachmentBuilder
 } from 'discord.js';
 import { db } from '../../db/database.js';
 import { buildActionEvidenceModal } from '../components/settingsModalBuilder.js';
 import { executeModerationResolution } from './actionExecution.js';
+import { generateCaseAuditMarkdown } from '../../investigation/auditExporter.js';
 
 export async function handleActionButton(interaction: ButtonInteraction): Promise<void> {
   const customId = interaction.customId;
@@ -31,6 +33,26 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
       content: '❌ Report record not found in database.',
       flags: MessageFlags.Ephemeral
     });
+    return;
+  }
+
+  // Export Case Audit Action
+  if (action === 'export') {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const auditText = generateCaseAuditMarkdown(report.id);
+      const file = new AttachmentBuilder(Buffer.from(auditText, 'utf8'), {
+        name: `verity_audit_${report.reportCode.toLowerCase()}.md`
+      });
+      await interaction.editReply({
+        content: `📋 **Case Audit Transcript: Report \`${report.reportCode}\`**\nDownload the complete multi-agent investigation transcript, evidence hashes, and human authorization record below:`,
+        files: [file]
+      });
+    } catch (err: any) {
+      await interaction.editReply({
+        content: `❌ Failed to generate case audit transcript: ${err.message}`
+      });
+    }
     return;
   }
 

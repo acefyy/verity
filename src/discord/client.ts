@@ -9,17 +9,27 @@ import {
   handleSettingsCommand,
   handleSettingsModalSubmit
 } from './interactions/settingsHandler.js';
+import { handleThreadMessage } from './interactions/threadQAHandler.js';
 
 export function createDiscordClient(): Client {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent
     ]
   });
 
   client.on(Events.ClientReady, (readyClient) => {
     console.log(`[Verity] Discord bot online as ${readyClient.user.tag}`);
+  });
+
+  client.on(Events.MessageCreate, async (message) => {
+    try {
+      await handleThreadMessage(message);
+    } catch (err) {
+      console.error('[Verity] Error handling thread message:', err);
+    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {

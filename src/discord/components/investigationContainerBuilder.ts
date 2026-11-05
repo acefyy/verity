@@ -156,6 +156,7 @@ export function buildPhase3Container(
 /**
  * In-place updated Action Container for when a report is Resolved.
  * Replaces the action buttons with the official resolution outcome in Emerald Green (0x22C55E).
+ * Optionally provides an "Export Case Audit" button.
  */
 export function buildResolvedActionContainer(params: {
   report: Report;
@@ -164,6 +165,7 @@ export function buildResolvedActionContainer(params: {
   moderatorId: string;
   officialReason: string;
   executedAt: number;
+  includeExportButton?: boolean;
 }) {
   const actionTitle = params.actionTaken.toUpperCase();
   const timeSeconds = Math.floor(params.executedAt / 1000);
@@ -193,6 +195,20 @@ export function buildResolvedActionContainer(params: {
       `*Investigation completed. Action authorized and synchronized with Switch.*`
   });
 
+  if (params.includeExportButton) {
+    containerComponents.push({
+      type: 1, // Action Row
+      components: [
+        {
+          type: 2, // Button
+          style: 2, // Secondary / Gray
+          label: 'Export Case Audit',
+          custom_id: `verity:act:export:${params.report.id}`
+        }
+      ]
+    });
+  }
+
   return {
     flags: IS_COMPONENTS_V2,
     components: [
@@ -200,6 +216,63 @@ export function buildResolvedActionContainer(params: {
         type: 17, // Container
         accent_color: 0x22C55E, // Emerald Green (meaningful success state)
         components: containerComponents
+      }
+    ]
+  };
+}
+
+/**
+ * Components V2 container for live moderator inquiry Q&A in the investigation thread.
+ */
+export function buildThreadQAContainer(
+  reportCode: string,
+  agentName: string,
+  question: string,
+  answer: string,
+  moderatorId: string
+) {
+  return {
+    flags: IS_COMPONENTS_V2,
+    components: [
+      {
+        type: 17, // Container
+        components: [
+          {
+            type: 10, // Text Display
+            content: `### 💬 Moderator Inquiry: \`@${agentName}\` • Report \`${reportCode}\`\n\n` +
+              `> **Question from <@${moderatorId}>:**\n` +
+              `> ${question.replace(/\n/g, '\n> ')}\n\n` +
+              `${sanitizeContent(answer)}\n\n` +
+              `*Answered by Switch Agent \`${agentName}\`*`
+          }
+        ]
+      }
+    ]
+  };
+}
+
+/**
+ * Progress container while an agent is answering a moderator inquiry.
+ */
+export function buildThreadQAProgressContainer(
+  agentName: string,
+  moderatorId: string,
+  question: string
+) {
+  return {
+    flags: IS_COMPONENTS_V2,
+    components: [
+      {
+        type: 17, // Container
+        components: [
+          {
+            type: 10, // Text Display
+            content: `### 💬 Moderator Inquiry: \`@${agentName}\`\n\n` +
+              `> **Question from <@${moderatorId}>:**\n` +
+              `> ${question.replace(/\n/g, '\n> ')}\n\n` +
+              `⏳ **@${agentName} is reviewing case history and formulating an answer...**`
+          }
+        ]
       }
     ]
   };

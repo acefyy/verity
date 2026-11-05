@@ -134,10 +134,16 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
     ? evidenceList.map((e) => `- ${e.filename} (${e.detectedMimeType}, ${e.sizeBytes} bytes)`).join('\n')
     : 'None submitted with report';
 
+  const priorResolutions = db.getResolutionsForUser(report.reportedUserId);
+  const priorHistoryText = priorResolutions.length > 0
+    ? priorResolutions.slice(0, 5).map((r) => `- [${new Date(r.executedAt * 1000).toISOString().split('T')[0]}] Action: ${r.actionTaken.toUpperCase()} - Reason: ${r.officialReason}`).join('\n')
+    : 'Clean history (no prior recorded violations)';
+
   const caseBrief =
     `🚨 **New Discord Moderation Report Intake: ${report.reportCode}**\n\n` +
     `**Target Member:** <@${report.reportedUserId}> (\`${report.reportedUserId}\`)\n` +
     `**Reporting Member:** <@${report.reporterId}> (\`${report.reporterId}\`)\n` +
+    `**Prior Server Violations:**\n${priorHistoryText}\n` +
     `**Alleged Violation:** ${report.reason}\n` +
     `**Message Link:** ${report.messageLink}\n` +
     `**Target Message Content:** ${targetMessageContent}\n` +

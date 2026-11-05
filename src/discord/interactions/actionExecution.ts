@@ -128,15 +128,38 @@ export async function executeModerationResolution(
         throw new Error('Target member is not currently in the server and cannot be timed out.');
       }
       officialReason = `24-hour timeout (mute) applied for: ${baseReason}`;
+      if (targetMember) {
+        await targetMember.send({
+          content: `⏳ **Verity Moderation Notice: ${guild.name}**\nA 24-hour timeout (mute) has been applied to your account following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}\nPlease review server rules during your timeout period.`
+        }).catch(() => {
+          // Member DMs might be closed
+        });
+      }
       await targetMember.timeout(24 * 60 * 60 * 1000, `Verity [${report.reportCode}]: ${baseReason}`);
     } else if (action === 'kick') {
       if (!targetMember) {
         throw new Error('Target member is not currently in the server and cannot be kicked.');
       }
       officialReason = `Server kick enforced for: ${baseReason}`;
+      // Send DM before kick while user still shares server
+      if (targetMember) {
+        await targetMember.send({
+          content: `🚪 **Verity Moderation Notice: ${guild.name}**\nYou have been removed (kicked) from **${guild.name}** following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}`
+        }).catch(() => {
+          // Member DMs might be closed
+        });
+      }
       await targetMember.kick(`Verity [${report.reportCode}]: ${baseReason}`);
     } else if (action === 'ban') {
       officialReason = `Server ban enforced for: ${baseReason}`;
+      // Send DM before ban while user still shares server
+      if (targetMember) {
+        await targetMember.send({
+          content: `⛔ **Verity Moderation Notice: ${guild.name}**\nYou have been permanently banned from **${guild.name}** following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}`
+        }).catch(() => {
+          // Member DMs might be closed
+        });
+      }
       await guild.members.ban(report.reportedUserId, {
         reason: `Verity [${report.reportCode}]: ${baseReason}`
       });
@@ -173,14 +196,15 @@ export async function executeModerationResolution(
   const milestones = db.getInvestigationMilestones(report.id);
   const advisorMilestone = milestones.find((m) => m.phase.includes('Advisor'));
 
-  // Update Action Container in place
+  // Update Action Container in place with Export Case Audit button
   const resolvedPayload = buildResolvedActionContainer({
     report,
     advisorContent: advisorMilestone?.content,
     actionTaken: action,
     moderatorId: interaction.user.id,
     officialReason,
-    executedAt
+    executedAt,
+    includeExportButton: true
   });
 
   try {
