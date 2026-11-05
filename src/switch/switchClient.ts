@@ -108,7 +108,7 @@ export class SwitchClient {
     const roomPayload = {
       name: `report-${reportCode.toLowerCase()}`,
       description,
-      internal_only: true,
+      internal_only: false,
       agent_ids: [
         this.agentTriageId,
         this.agentInvestigatorId,

@@ -75,7 +75,7 @@ describe('Switch Platform Client Specifications', () => {
           assert.equal(opts.method, 'POST');
           const body = JSON.parse(opts.body);
           assert.equal(body.name, 'report-v-001');
-          assert.equal(body.internal_only, true);
+          assert.equal(body.internal_only, false);
           assert.deepEqual(body.agent_ids, ['triage-1', 'inv-2', 'adv-3']);
           assert.ok(opts.headers.Cookie.includes('switch_auth=token123'));
           roomCreated = true;
