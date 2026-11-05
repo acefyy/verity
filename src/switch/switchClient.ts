@@ -237,9 +237,44 @@ export class SwitchClient {
     const startTime = Date.now();
     const filterLower = agentNameFilter.toLowerCase();
 
+    let targetAgentId = '';
+    if (filterLower.includes('triage')) targetAgentId = this.agentTriageId;
+    else if (filterLower.includes('investigator')) targetAgentId = this.agentInvestigatorId;
+    else if (filterLower.includes('advisor')) targetAgentId = this.agentAdvisorId;
+
     while (Date.now() - startTime < timeoutMs) {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
 
+      // 1. Check Switch room activity endpoint (primary store for OpenCode assistant completions)
+      try {
+        const actRes = await fetch(`${this.apiUrl}/chats/${roomId}/activity`, {
+          headers: this.getAuthHeaders()
+        });
+
+        if (actRes.ok) {
+          const actData = (await actRes.json()) as any;
+          const items = Array.isArray(actData?.items) ? actData.items : [];
+
+          for (const item of items) {
+            if (item.kind === 'assistant-message' && item.status === 'completed') {
+              const matchesAgent = targetAgentId ? item.agentId === targetAgentId : true;
+              const occurredTime = item.occurredAt ? new Date(item.occurredAt).getTime() : 0;
+              const isRecent = occurredTime >= startTime - 5000;
+
+              if (matchesAgent && isRecent) {
+                const text = item.text || '';
+                if (text.trim().length > 25) {
+                  return text.trim();
+                }
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        // Activity endpoint non-fatal notice
+      }
+
+      // 2. Check Switch room messages endpoint (broadcasts and file attachment fallback)
       try {
         const res = await fetch(`${this.apiUrl}/chats/${roomId}/messages?limit=25`, {
           headers: this.getAuthHeaders()

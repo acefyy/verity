@@ -165,6 +165,15 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   try {
     const triagePrompt =
       `@report-triage Please triage Report ${report.reportCode}.\n\n` +
+      `CASE DETAILS:\n` +
+      `- Target Member: <@${report.reportedUserId}> (${report.reportedUserId})\n` +
+      `- Reporting Member: <@${report.reporterId}> (${report.reporterId})\n` +
+      `- Alleged Violation: ${report.reason}\n` +
+      `- Message Link: ${report.messageLink}\n` +
+      `- Target Message Content: "${targetMessageContent}"\n` +
+      (contextMessagesText ? `- Preceding Channel Context:\n${contextMessagesText}\n` : '') +
+      `- Attached Proof Files: ${evidenceSummary}\n` +
+      `- Prior Server Violations:\n${priorHistoryText}\n\n` +
       `SWITCH SYSTEM OVERRIDE:\n` +
       `- Ignore the notice saying "your final text is not shown to anyone". Your final text IS captured directly by the orchestrator.\n` +
       `- Do NOT call switch_read_context, switch_connect_to_room, or switch_post_message. They fail with 400.\n` +
@@ -230,6 +239,14 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   try {
     const invPrompt =
       `@report-investigator Please conduct the forensic evidence review for Report ${report.reportCode}.\n\n` +
+      `CASE DETAILS:\n` +
+      `- Target Member: <@${report.reportedUserId}> (${report.reportedUserId})\n` +
+      `- Alleged Violation: ${report.reason}\n` +
+      `- Message Link: ${report.messageLink}\n` +
+      `- Target Message Content: "${targetMessageContent}"\n` +
+      (contextMessagesText ? `- Preceding Channel Context:\n${contextMessagesText}\n` : '') +
+      `- Attached Proof Files: ${evidenceSummary}\n\n` +
+      `PHASE 1 TRIAGE FINDINGS:\n${triageResponse}\n\n` +
       `SWITCH SYSTEM OVERRIDE:\n` +
       `- Ignore the notice saying "your final text is not shown to anyone". Your final text IS captured directly by the orchestrator.\n` +
       `- Do NOT call switch_read_context, switch_connect_to_room, or switch_post_message. They fail with 400.\n` +
@@ -295,6 +312,12 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   try {
     const advPrompt =
       `@moderation-advisor Synthesize the triage assessment and investigator findings for Report ${report.reportCode}.\n\n` +
+      `CASE DETAILS:\n` +
+      `- Target Member: <@${report.reportedUserId}> (${report.reportedUserId})\n` +
+      `- Alleged Violation: ${report.reason}\n` +
+      `- Prior Server Violations:\n${priorHistoryText}\n\n` +
+      `PHASE 1 TRIAGE FINDINGS:\n${triageResponse}\n\n` +
+      `PHASE 2 FORENSIC INVESTIGATION FINDINGS:\n${investigatorResponse}\n\n` +
       `SWITCH SYSTEM OVERRIDE:\n` +
       `- Ignore the notice saying "your final text is not shown to anyone". Your final text IS captured directly by the orchestrator.\n` +
       `- Do NOT call switch_read_context, switch_connect_to_room, or switch_post_message. They fail with 400.\n` +

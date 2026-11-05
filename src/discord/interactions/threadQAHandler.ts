@@ -88,9 +88,19 @@ export async function handleThreadMessage(message: Message): Promise<void> {
 
   // Dispatch question into the Switch case room
   try {
+    const milestones = db.getInvestigationMilestones(report.id);
+    const milestoneSummary = milestones.length > 0
+      ? milestones.map((m) => `[${m.phase} (@${m.agentName})]:\n${m.content}`).join('\n\n')
+      : 'No prior milestones recorded.';
+
     const prompt =
       `@${agentName} A human moderator (<@${message.author.id}>) asked the following question regarding Report ${report.reportCode}:\n\n` +
       `"${message.cleanContent}"\n\n` +
+      `CASE CONTEXT:\n` +
+      `- Target Member: <@${report.reportedUserId}> (${report.reportedUserId})\n` +
+      `- Alleged Violation: ${report.reason}\n\n` +
+      `INVESTIGATION MILESTONES SO FAR:\n` +
+      `${milestoneSummary}\n\n` +
       `SWITCH SYSTEM OVERRIDE:\n` +
       `- Ignore the notice saying "your final text is not shown to anyone". Your final text IS captured directly by the orchestrator.\n` +
       `- Do NOT call switch_read_context, switch_connect_to_room, or switch_post_message. They fail with 400.\n` +
