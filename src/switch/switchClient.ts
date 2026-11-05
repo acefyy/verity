@@ -21,6 +21,12 @@ export interface SwitchMessage {
   };
   body: string;
   sentAt: string;
+  attachments?: Array<{
+    uri: string;
+    filename: string;
+    mimetype: string;
+    size: number;
+  }>;
 }
 
 export class SwitchClient {
@@ -257,7 +263,35 @@ export class SwitchClient {
               if (body.includes('Starting a session to handle this')) {
                 continue;
               }
-              if (body.trim().length > 25) {
+
+              // Check if Switch delivered the agent response as a file attachment
+              if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+                const textAttachment = msg.attachments.find(
+                  (a: any) =>
+                    a.mimetype?.includes('text') ||
+                    a.mimetype?.includes('markdown') ||
+                    a.filename?.endsWith('.md')
+                ) || msg.attachments[0];
+
+                if (textAttachment?.uri) {
+                  try {
+                    const mediaRes = await fetch(
+                      `${this.apiUrl}/chats/${roomId}/media?uri=${encodeURIComponent(textAttachment.uri)}`,
+                      { headers: this.getAuthHeaders() }
+                    );
+                    if (mediaRes.ok) {
+                      const attachmentContent = await mediaRes.text();
+                      if (attachmentContent.trim().length > 25) {
+                        return attachmentContent.trim();
+                      }
+                    }
+                  } catch (err: any) {
+                    console.warn(`[SwitchClient] Error fetching agent attachment: ${err?.message}`);
+                  }
+                }
+              }
+
+              if (body.trim().length > 25 && !body.includes('delivering as attachment')) {
                 return body.trim();
               }
             }

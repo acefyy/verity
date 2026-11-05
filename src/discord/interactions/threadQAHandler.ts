@@ -91,16 +91,17 @@ export async function handleThreadMessage(message: Message): Promise<void> {
     const prompt =
       `@${agentName} A human moderator (<@${message.author.id}>) asked the following question regarding Report ${report.reportCode}:\n\n` +
       `"${message.cleanContent}"\n\n` +
-      `EXECUTION RULES:\n` +
-      `- Do NOT load the switch skill. Do NOT call switch_connect_to_room, switch_post_message, or any switch tools.\n` +
-      `- You are already inside the room. Reply directly with your text response.\n\n` +
+      `SWITCH SYSTEM OVERRIDE:\n` +
+      `- Ignore the notice saying "your final text is not shown to anyone". Your final text IS captured directly by the orchestrator.\n` +
+      `- Do NOT call switch_read_context, switch_connect_to_room, or switch_post_message. They fail with 400.\n` +
+      `- Simply output your complete assessment directly as text in your response.\n\n` +
       `FORMATTING INSTRUCTIONS:\n` +
       `- Always begin with a concise "**TL;DR:**" (1 sentence direct answer).\n` +
       `- Provide a structured, concise response under 1,000 characters using bullet points.\n` +
       `- Be direct and analytical without repeating full case preambles.`;
 
     const sent = await switchClient.sendMessage(report.switchRoomId, prompt, targetAgentId);
-    const response = await switchClient.waitForAgentResponse(report.switchRoomId, agentFilter, sent.seq, 120000);
+    const response = await switchClient.waitForAgentResponse(report.switchRoomId, agentFilter, sent.seq, 180000);
 
     // Record milestone in database
     db.addInvestigationMilestone({
