@@ -165,6 +165,9 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   try {
     const triagePrompt =
       `@report-triage Please triage Report ${report.reportCode}.\n\n` +
+      `EXECUTION RULES:\n` +
+      `- Do NOT load the switch skill. Do NOT call switch_connect_to_room, switch_post_message, or any switch tools.\n` +
+      `- You are already inside the room. Reply directly with your text response.\n\n` +
       `FORMATTING INSTRUCTIONS:\n` +
       `- Always begin with a concise "**TL;DR:**" (1-2 sentences summarizing urgency and violation category).\n` +
       `- Keep your entire response compact, structured, and under 1,200 characters using bullet points:\n` +
@@ -226,6 +229,9 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   try {
     const invPrompt =
       `@report-investigator Please conduct the forensic evidence review for Report ${report.reportCode}.\n\n` +
+      `EXECUTION RULES:\n` +
+      `- Do NOT load the switch skill. Do NOT call switch_connect_to_room, switch_post_message, or any switch tools.\n` +
+      `- You are already inside the room. Reply directly with your text response.\n\n` +
       `FORMATTING INSTRUCTIONS:\n` +
       `- Always begin with a concise "**TL;DR:**" (1-2 sentences stating verified facts versus unverified claims).\n` +
       `- Keep your entire report compact, structured, and under 1,500 characters using bullet points:\n` +
@@ -287,6 +293,9 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
   try {
     const advPrompt =
       `@moderation-advisor Synthesize the triage assessment and investigator findings for Report ${report.reportCode}.\n\n` +
+      `EXECUTION RULES:\n` +
+      `- Do NOT load the switch skill. Do NOT call switch_connect_to_room, switch_post_message, or any switch tools.\n` +
+      `- You are already inside the room. Reply directly with your text response.\n\n` +
       `FORMATTING INSTRUCTIONS:\n` +
       `- Always begin with a concise "**TL;DR:**" (1-2 sentences stating your recommended action: Dismiss, Warn, Timeout/Mute, Kick, or Ban).\n` +
       `- Keep your entire recommendation compact, structured, and under 1,200 characters using bullet points:\n` +

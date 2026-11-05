@@ -91,6 +91,9 @@ export async function handleThreadMessage(message: Message): Promise<void> {
     const prompt =
       `@${agentName} A human moderator (<@${message.author.id}>) asked the following question regarding Report ${report.reportCode}:\n\n` +
       `"${message.cleanContent}"\n\n` +
+      `EXECUTION RULES:\n` +
+      `- Do NOT load the switch skill. Do NOT call switch_connect_to_room, switch_post_message, or any switch tools.\n` +
+      `- You are already inside the room. Reply directly with your text response.\n\n` +
       `FORMATTING INSTRUCTIONS:\n` +
       `- Always begin with a concise "**TL;DR:**" (1 sentence direct answer).\n` +
       `- Provide a structured, concise response under 1,000 characters using bullet points.\n` +
