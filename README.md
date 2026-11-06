@@ -22,7 +22,7 @@ Verity reimagines moderation as an institutional case management workflow:
    - **Phase 1: Report Triage** (`report-triage`): Rapid assessment of urgency, severity, and rule categorization.
    - **Phase 2: Evidence Forensics** (`report-investigator`): Detailed verification of reported messages, preceding context, and evidence integrity.
    - **Phase 3: Moderation Advisor** (`moderation-advisor`): Policy synthesis and proportional punishment recommendation.
-3. **Human Authorization & Execution:** AI agents never possess Discord punishment permissions. Verity enforces a strict two-tier permission and role-hierarchy check on the human moderator before executing actions (`Dismiss`, `Warn`, `Timeout`, `Kick`, `Ban`) directly via interactive Discord buttons.
+3. **Human Authorization & Execution:** AI agents never possess Discord punishment permissions. Verity enforces a strict two-tier permission and role-hierarchy check on the human moderator before authorizing actions (`Take Action`, `Dismiss Report`) directly via interactive Discord buttons and action modals.
 4. **Closed-Loop Audit Trail:** Final human decisions are updated in-place inside Discord threads and synchronized back to the Switch room, leaving an immutable record across both platforms.
 5. **Server Governance & Settings:** Dedicated `/settings` slash command with Channel Selects and Checkboxes to configure report routing, action audit log channels, and mandatory evidence enforcement.
 6. **Interactive Agent Q&A:** Moderators can ask clarifying follow-up questions to any Switch agent directly in the Discord report thread with live progress and in-place responses.
@@ -63,7 +63,7 @@ Verity reimagines moderation as an institutional case management workflow:
        │
        └── Phase 3: @moderation-advisor
              └── Discord thread live progress -> Edits in place with Recommendation
-                   + 5 Interactive Action Buttons: [Dismiss] [Warn] [Timeout] [Kick] [Ban]
+                   + 2 Interactive Action Buttons: [Take Action] [Dismiss Report]
        │
        ▼
 [ Human Moderator Decision ]
@@ -100,7 +100,7 @@ Verity reimagines moderation as an institutional case management workflow:
 - **Zero Agent Autonomy for Punishments:** AI agents advise; humans decide.
 - **Two-Tier Discord Permission Verification:** Validates server-side that the clicking user has the required native Discord permissions (`ModerateMembers`, `KickMembers`, `BanMembers`).
 - **Role Hierarchy Enforcement:** Ensures neither the moderator nor the bot can act against a user with equal or higher role position, preventing privilege escalation.
-- **Require Evidence Policy:** When enabled in `/settings`, moderators cannot complete punitive actions on reports lacking evidence without providing verified proof details via an interactive confirmation modal.
+- **Require Evidence Policy:** When enabled in `/settings`, users submitting reports must provide proof files (screenshots or documents); reports submitted without valid evidence are rejected at intake.
 
 ### 5. Server-Specific Settings & Action Audit Logs (`/settings`)
 - **Immediate Configuration Modal:** Running `/settings` opens an interactive configuration modal with native Channel Selects and Checkboxes.
@@ -240,7 +240,7 @@ SWITCH_AGENT_ADVISOR_ID=9646eee2-cea5-436e-9aba-8a3a2040b1d7
 
 ### 3. Run Automated Tests
 
-Verity includes an extensive suite of 44 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, and case audit export:
+Verity includes an extensive suite of 50 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, Take Action modal execution, and case audit export:
 
 ```bash
 npm test
@@ -248,9 +248,9 @@ npm test
 
 Expected output:
 ```
-ℹ tests 44
-ℹ suites 9
-ℹ pass 44
+ℹ tests 50
+ℹ suites 10
+ℹ pass 50
 ℹ fail 0
 ```
 

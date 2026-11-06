@@ -218,12 +218,16 @@ export async function executeModerationResolution(
     if (!messageToEdit && interaction.channel && interaction.channel.isThread()) {
       const msgs = await interaction.channel.messages.fetch({ limit: 10 }).catch(() => null);
       if (msgs) {
+        const hasActBtn = (comps: any[]): boolean => {
+          for (const c of comps) {
+            const id = c.customId || c.custom_id;
+            if (id && (id.startsWith('verity:act:') || id.startsWith('verity:modal:'))) return true;
+            if (Array.isArray(c.components) && hasActBtn(c.components)) return true;
+          }
+          return false;
+        };
         messageToEdit = [...msgs.values()].find((m) =>
-          m.components?.[0]?.type === 17 &&
-          (m.components?.[1] as any)?.components?.some((b: any) => {
-            const bId = b.customId || b.custom_id;
-            return bId && (bId.startsWith('verity:act:') || bId.startsWith('verity:modal:'));
-          })
+          Array.isArray(m.components) && hasActBtn(m.components)
         );
       }
     }
@@ -353,7 +357,11 @@ export async function executeModerationResolution(
   }
 
   // Ephemeral response
+  const successNotice = action === 'dismiss'
+    ? `✅ Report \`${report.reportCode}\` successfully dismissed.`
+    : `✅ Moderation action \`${action.toUpperCase()}\` successfully authorized and applied for Report \`${report.reportCode}\`.`;
+
   await interaction.editReply({
-    content: `✅ Moderation action \`${action.toUpperCase()}\` successfully authorized and applied for Report \`${report.reportCode}\`.`
+    content: successNotice
   });
 }

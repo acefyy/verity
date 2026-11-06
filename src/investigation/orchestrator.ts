@@ -135,8 +135,19 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
     : 'None submitted with report';
 
   const priorResolutions = db.getResolutionsForUser(report.reportedUserId);
+  const formatPriorDate = (ts: number): string => {
+    let ms = ts;
+    if (ms > 1e14) ms = Math.floor(ms / 1000);
+    else if (ms < 1e11) ms = ms * 1000;
+    const d = new Date(ms);
+    if (isNaN(d.getTime()) || d.getFullYear() > 2100 || d.getFullYear() < 2020) {
+      return 'Prior record';
+    }
+    return d.toISOString().split('T')[0];
+  };
+
   const priorHistoryText = priorResolutions.length > 0
-    ? priorResolutions.slice(0, 5).map((r) => `- [${new Date(r.executedAt > 1e11 ? r.executedAt : r.executedAt * 1000).toISOString().split('T')[0]}] Action: ${r.actionTaken.toUpperCase()} - Reason: ${r.officialReason}`).join('\n')
+    ? priorResolutions.slice(0, 5).map((r) => `- [${formatPriorDate(r.executedAt)}] Action: ${r.actionTaken.toUpperCase()} - Reason: ${r.officialReason}`).join('\n')
     : 'Clean history (no prior recorded violations)';
 
   const caseBrief =

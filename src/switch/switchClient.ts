@@ -259,7 +259,7 @@ export class SwitchClient {
             if (item.kind === 'assistant-message' && item.status === 'completed') {
               const matchesAgent = targetAgentId ? item.agentId === targetAgentId : true;
               const occurredTime = item.occurredAt ? new Date(item.occurredAt).getTime() : 0;
-              const isRecent = occurredTime >= startTime - 5000;
+              const isRecent = occurredTime >= startTime - 60000;
 
               if (matchesAgent && isRecent) {
                 const text = item.text || '';
@@ -290,7 +290,7 @@ export class SwitchClient {
         for (const msg of messages) {
           if (msg.seq > afterSeq) {
             const senderName = msg.sender?.name?.toLowerCase() || '';
-            const isTargetAgent = senderName.includes(filterLower);
+            const isTargetAgent = senderName.includes(filterLower) || (Boolean(targetAgentId) && msg.sender?.id === targetAgentId);
 
             if (isTargetAgent) {
               const body = msg.body || '';
