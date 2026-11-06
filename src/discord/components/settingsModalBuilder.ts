@@ -69,16 +69,16 @@ export function buildSettingsModal(options: SettingsModalOptions = {}) {
 
 export interface TakeActionModalOptions {
   report: Report;
-  requireEvidence?: boolean;
   defaultReason?: string;
 }
 
 /**
  * Builds the Take Action modal presenting punishment selection, duration,
- * pre-filled editable reason, and evidence input matching the server setting.
+ * pre-filled editable reason, and optional evidence/context notes.
+ * Evidence is never required from moderators.
  */
 export function buildTakeActionModal(options: TakeActionModalOptions) {
-  const { report, requireEvidence = false, defaultReason } = options;
+  const { report, defaultReason } = options;
   const prefillReason = (defaultReason || report.reason || '').slice(0, 1000);
 
   return {
@@ -151,71 +151,16 @@ export function buildTakeActionModal(options: TakeActionModalOptions) {
       },
       {
         type: 18, // ComponentType.LABEL
-        label: requireEvidence ? 'Evidence & Proof (Required)' : 'Evidence & Proof (Optional)',
-        description: requireEvidence
-          ? 'Server policy requires proof details or URLs before enforcing action'
-          : 'Optional links, screenshots, or proof details for records',
+        label: 'Evidence & Notes (Optional)',
+        description: 'Optional links, screenshots, or context notes for records',
         component: {
           type: 4, // ComponentType.TEXT_INPUT
           custom_id: 'verity:field:action_evidence',
           style: 2, // Paragraph
-          min_length: requireEvidence ? 5 : 0,
+          min_length: 0,
           max_length: 1000,
-          placeholder: requireEvidence
-            ? 'Enter evidence link or detailed proof corroborating the violation...'
-            : 'Optional additional proof or context notes...',
-          required: requireEvidence
-        }
-      }
-    ]
-  };
-}
-
-/**
- * Builds the Action Evidence & Confirmation modal presented when evidence is required
- * before a moderator can complete a moderation action (legacy fallback).
- */
-export function buildActionEvidenceModal(
-  report: Report,
-  action: string,
-  hasReportEvidence: boolean
-) {
-  const actionTitle = action.toUpperCase();
-
-  return {
-    title: `Evidence Required: ${actionTitle}`,
-    custom_id: `verity:modal:action_evidence:${action}:${report.id}`,
-    components: [
-      {
-        type: 18, // ComponentType.LABEL
-        label: 'Proof / Evidence (URL or Details)',
-        description: hasReportEvidence
-          ? 'Evidence files already attached. Enter additional proof or leave as is.'
-          : 'Provide image link, message link, or forensic proof (Required by server settings)',
-        component: {
-          type: 4, // ComponentType.TEXT_INPUT
-          custom_id: 'verity:field:action_evidence',
-          style: 2, // Paragraph
-          min_length: hasReportEvidence ? 0 : 10,
-          max_length: 1000,
-          placeholder: hasReportEvidence
-            ? 'Optional additional proof or context notes...'
-            : 'Enter evidence link or detailed proof corroborating the violation...',
-          required: !hasReportEvidence
-        }
-      },
-      {
-        type: 18, // ComponentType.LABEL
-        label: 'Moderation Reason',
-        description: 'Specify the official reason recorded in moderation audit logs',
-        component: {
-          type: 4, // ComponentType.TEXT_INPUT
-          custom_id: 'verity:field:action_reason',
-          style: 2, // Paragraph
-          min_length: 5,
-          max_length: 500,
-          value: report.reason.slice(0, 500),
-          required: true
+          placeholder: 'Optional additional proof or context notes...',
+          required: false
         }
       }
     ]

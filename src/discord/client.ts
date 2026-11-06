@@ -2,8 +2,7 @@ import { Client, GatewayIntentBits, Events, MessageFlags } from 'discord.js';
 import { handleReportContextMenu } from './interactions/contextMenuHandler.js';
 import {
   handleReportModalSubmit,
-  handleTakeActionModalSubmit,
-  handleActionEvidenceModalSubmit
+  handleTakeActionModalSubmit
 } from './interactions/modalSubmitHandler.js';
 import { handleActionButton } from './interactions/actionButtonHandler.js';
 import {
@@ -50,8 +49,6 @@ export function createDiscordClient(): Client {
           await handleSettingsModalSubmit(interaction);
         } else if (interaction.customId.startsWith('verity:modal:take_action:')) {
           await handleTakeActionModalSubmit(interaction);
-        } else if (interaction.customId.startsWith('verity:modal:action_evidence:')) {
-          await handleActionEvidenceModalSubmit(interaction);
         }
       } else if (interaction.isButton()) {
         if (interaction.customId.startsWith('verity:act:')) {

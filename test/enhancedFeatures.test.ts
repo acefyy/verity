@@ -6,9 +6,8 @@ import {
   buildThreadQAContainer,
   buildThreadQAProgressContainer
 } from '../src/discord/components/investigationContainerBuilder.js';
-import { generateCaseAuditMarkdown } from '../src/investigation/auditExporter.js';
 
-describe('Enhanced Features: Thread QA, Audit Exporter, and User History', () => {
+describe('Enhanced Features: Thread QA, In-Place Resolution, and User History', () => {
   let testDb: Database;
 
   beforeEach(() => {
@@ -87,7 +86,7 @@ describe('Enhanced Features: Thread QA, Audit Exporter, and User History', () =>
     assert.equal(cleanUser.length, 0);
   });
 
-  test('buildResolvedActionContainer includes export button when requested', () => {
+  test('buildResolvedActionContainer renders clean Emerald Green status without export button', () => {
     const report = testDb.createReport({
       guildId: 'g-100',
       channelId: 'c-200',
@@ -103,22 +102,23 @@ describe('Enhanced Features: Thread QA, Audit Exporter, and User History', () =>
       actionTaken: 'ban',
       moderatorId: 'mod-admin',
       officialReason: 'Severe malicious behavior',
-      executedAt: Date.now(),
-      includeExportButton: true
+      executedAt: Date.now()
     });
 
     assert.ok(resolvedPayload.components);
     const container = resolvedPayload.components[0];
     assert.equal(container.type, 17); // Container
+    assert.equal(container.accent_color, 0x22C55E); // Emerald Green
 
+    // Ensure Action Row is completely omitted (no export button)
     const actionRow = container.components.find((c: any) => c.type === 1);
-    assert.ok(actionRow, 'Expected Action Row to be present');
-    assert.ok(Array.isArray(actionRow.components));
-    const exportBtn = actionRow.components.find(
-      (btn: any) => btn.custom_id === `verity:act:export:${report.id}`
-    );
-    assert.ok(exportBtn, 'Export button must be present in Action Row');
-    assert.equal(exportBtn.label, 'Export Case Audit');
+    assert.equal(actionRow, undefined);
+
+    const textComp = container.components.find((c: any) => c.type === 10);
+    assert.ok(textComp);
+    assert.ok(textComp.content.includes('Status: Resolved'));
+    assert.ok(textComp.content.includes('BAN'));
+    assert.ok(textComp.content.includes('mod-admin'));
   });
 
   test('buildThreadQAProgressContainer and buildThreadQAContainer render properly', () => {
@@ -138,66 +138,5 @@ describe('Enhanced Features: Thread QA, Audit Exporter, and User History', () =>
     assert.equal(textComp.type, 10);
     assert.ok(textComp.content.includes('Is the user an alt account?'));
     assert.ok(textComp.content.includes('sockpuppet cluster'));
-  });
-
-  test('generateCaseAuditMarkdown generates complete, structured incident audit', () => {
-    const report = testDb.createReport({
-      guildId: 'g-100',
-      channelId: 'c-200',
-      messageId: 'm-300',
-      messageLink: 'https://discord.com/channels/g-100/c-200/m-300',
-      reportedUserId: 'u-badguy',
-      reporterId: 'u-reporter',
-      reason: 'Malicious links and token grabber'
-    });
-
-    testDb.addEvidenceMetadata({
-      reportId: report.id,
-      filename: 'grabber.png',
-      sha256Hash: 'abcdef0123456789',
-      sizeBytes: 10240,
-      detectedMimeType: 'image/png',
-      discordCdnUrl: 'https://cdn.discordapp.com/attachments/1/2/grabber.png'
-    });
-
-    testDb.addInvestigationMilestone({
-      reportId: report.id,
-      phase: 'phase_1',
-      agentName: 'report-triage',
-      content: 'Identified critical severity security violation.'
-    });
-
-    testDb.addInvestigationMilestone({
-      reportId: report.id,
-      phase: 'phase_2',
-      agentName: 'report-investigator',
-      content: 'Domain virustotal score 12/80 flagged as malicious redirect.'
-    });
-
-    testDb.recordModerationResolution({
-      reportId: report.id,
-      moderatorId: 'mod-chief',
-      actionTaken: 'ban',
-      officialReason: 'Confirmed distribution of malware payload',
-      targetUserId: 'u-badguy'
-    });
-
-    const markdown = generateCaseAuditMarkdown(report.id, testDb);
-
-    assert.ok(markdown.includes(`# Verity Case Audit Report: ${report.reportCode}`));
-    assert.ok(markdown.includes('## Executive Summary'));
-    assert.ok(markdown.includes('u-badguy'));
-    assert.ok(markdown.includes('u-reporter'));
-    assert.ok(markdown.includes('## Forensic Evidence Audit'));
-    assert.ok(markdown.includes('grabber.png'));
-    assert.ok(markdown.includes('image/png'));
-    assert.ok(markdown.includes('## Multi-Agent Investigation Log'));
-    assert.ok(markdown.includes('report-triage'));
-    assert.ok(markdown.includes('report-investigator'));
-    assert.ok(markdown.includes('## Moderation Resolution'));
-    assert.ok(markdown.includes('mod-chief'));
-    assert.ok(markdown.includes('Confirmed distribution of malware payload'));
-    assert.ok(!markdown.includes('\u2014'), 'Must not contain em dashes');
-    assert.ok(!markdown.includes('\u2013'), 'Must not contain en dashes');
   });
 });

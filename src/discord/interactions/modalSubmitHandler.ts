@@ -223,7 +223,7 @@ export async function handleReportModalSubmit(
     status: 'submitted'
   });
 
-  // 6. Resolve #reports channel from per-guild settings or environment fallback
+  // 6. Resolve #reports channel from per-guild settings, environment fallback, or auto-discovery
   const targetReportsChannelId = settings.reportsChannelId || config.reportsChannelId;
 
   let reportsChannel: TextChannel | null = null;
@@ -235,6 +235,27 @@ export async function handleReportModalSubmit(
       }
     } catch (err: any) {
       console.error(`[Verity] Failed to fetch reports channel (${targetReportsChannelId}):`, err?.message);
+    }
+  }
+
+  // Auto-discovery fallback: search guild channels for an existing channel named reports
+  if (!reportsChannel && interaction.guild) {
+    try {
+      const channels = await interaction.guild.channels.fetch().catch(() => null);
+      if (channels) {
+        const candidate = channels.find(
+          (c) => Boolean(c && c.isTextBased() && !c.isDMBased() && (c.name === 'reports' || c.name === 'verity-reports' || c.name === 'mod-reports'))
+        );
+        if (candidate) {
+          reportsChannel = candidate as TextChannel;
+          db.upsertGuildSettings({
+            guildId: interaction.guild.id,
+            reportsChannelId: reportsChannel.id
+          });
+        }
+      }
+    } catch {
+      // Continue
     }
   }
 
@@ -494,21 +515,6 @@ export async function handleTakeActionModalSubmit(
     }
   }
 
-  // Evidence validation according to server policy
-  const settings = db.getGuildSettings(guild.id);
-  const evidenceList = db.getEvidenceByReportId(report.id);
-  const hasReportEvidence = evidenceList.length > 0;
-
-  if (settings.requireEvidence) {
-    const hasModeratorProof = moderatorEvidence && moderatorEvidence.trim().length >= 5;
-    if (!hasReportEvidence && !hasModeratorProof) {
-      await interaction.editReply({
-        content: '🚫 Action blocked: Server policy requires proof/evidence. Please provide evidence details or links (at least 5 characters).'
-      });
-      return;
-    }
-  }
-
   // Save moderator evidence statement if provided
   if (moderatorEvidence && moderatorEvidence.trim().length > 0) {
     const trimmedEvidence = moderatorEvidence.trim();
@@ -533,100 +539,5 @@ export async function handleTakeActionModalSubmit(
     moderatorEvidence: moderatorEvidence || undefined,
     durationMs: parsedDuration?.ms,
     durationLabel: parsedDuration?.label
-  });
-}
-
-/**
- * Handles submission of the Action Evidence & Confirmation modal
- * when evidence is required for moderation actions (legacy fallback).
- */
-export async function handleActionEvidenceModalSubmit(
-  interaction: ModalSubmitInteraction
-): Promise<void> {
-  const prefix = 'verity:modal:action_evidence:';
-  if (!interaction.customId.startsWith(prefix)) {
-    return;
-  }
-
-  const parts = interaction.customId.slice(prefix.length).split(':');
-  if (parts.length < 2) {
-    return;
-  }
-
-  const action = parts[0].toLowerCase();
-  const reportId = parts[1];
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const report = db.getReportById(reportId);
-  if (!report) {
-    await interaction.editReply({
-      content: '❌ Report record not found in database.'
-    });
-    return;
-  }
-
-  const existingResolution = db.getModerationResolution(report.id);
-  if (existingResolution || report.status === 'resolved') {
-    await interaction.editReply({
-      content: `ℹ️ Report \`${report.reportCode}\` has already been resolved by <@${existingResolution?.moderatorId || 'a moderator'}>.`
-    });
-    return;
-  }
-
-  const guild = interaction.guild;
-  if (!guild) {
-    await interaction.editReply({
-      content: '❌ Actions can only be performed within a server.'
-    });
-    return;
-  }
-
-  const moderatorMember = interaction.member as GuildMember;
-  if (!moderatorMember) {
-    await interaction.editReply({
-      content: '❌ Could not verify your member profile.'
-    });
-    return;
-  }
-
-  const settings = db.getGuildSettings(guild.id);
-  const evidenceList = db.getEvidenceByReportId(report.id);
-  const hasReportEvidence = evidenceList.length > 0;
-
-  const moderatorEvidence = getModalInputValue(interaction, 'verity:field:action_evidence');
-  const customReason = getModalInputValue(interaction, 'verity:field:action_reason');
-
-  // If evidence is required and report has no attached evidence, moderator MUST supply evidence
-  if (settings.requireEvidence && action !== 'dismiss') {
-    if (!hasReportEvidence && (!moderatorEvidence || moderatorEvidence.trim().length < 5)) {
-      await interaction.editReply({
-        content: '🚫 Action blocked: Server policy requires proof/evidence before executing moderation actions. Please provide evidence details or links (at least 5 characters).'
-      });
-      return;
-    }
-  }
-
-  // If moderator provided evidence text or link, record it in database
-  if (moderatorEvidence && moderatorEvidence.trim().length > 0) {
-    const trimmedEvidence = moderatorEvidence.trim();
-    db.addEvidenceMetadata({
-      reportId: report.id,
-      filename: 'moderator_proof_statement.txt',
-      detectedMimeType: 'text/plain',
-      sizeBytes: Buffer.byteLength(trimmedEvidence, 'utf8'),
-      sha256Hash: createHash('sha256').update(trimmedEvidence).digest('hex'),
-      discordCdnUrl: trimmedEvidence.startsWith('http') ? trimmedEvidence : report.messageLink
-    });
-  }
-
-  await executeModerationResolution({
-    interaction,
-    report,
-    action,
-    moderatorMember,
-    guild,
-    customReason: customReason || undefined,
-    moderatorEvidence: moderatorEvidence || undefined
   });
 }

@@ -10,7 +10,7 @@ Submitted to the **Flip the Switch Hackathon** (Track 01: Best Business Workflow
 
 Community moderation in Discord has historically been an exhausting, inconsistent, and unstructured manual chore. Volunteer moderators are inundated with vague user reports, conflicting claims, tampered screenshots, and repetitive offender queries. At the same time, automated moderation bots that ban users without human review destroy member trust and introduce serious security risks.
 
-**Verity** solves this by establishing a disciplined business case management pipeline. When a member reports a message, Verity captures the incident through secure Discord Components V2 modals, cryptographically verifies evidence in memory, provisions an isolated case room in **Switch**, coordinates a 3-agent investigation pipeline (Triage, Forensics, and Advisor), and delivers actionable findings directly to human moderators. Crucially, AI agents never enforce punishments autonomously: human moderators retain sole authority via interactive action modals, role-hierarchy checks, and pre-action DM warnings, with all final decisions logged back to Switch and exportable as cryptographic case audits.
+**Verity** solves this by establishing a disciplined business case management pipeline. When a member reports a message, Verity captures the incident through secure Discord Components V2 modals, cryptographically verifies evidence in memory, provisions an isolated case room in **Switch**, coordinates a 3-agent investigation pipeline (Triage, Forensics, and Advisor), and delivers actionable findings directly to human moderators. Crucially, AI agents never enforce punishments autonomously: human moderators retain sole authority via interactive action modals, role-hierarchy checks, and pre-action DM warnings, with all final decisions logged back to Switch and recorded in persistent SQLite case files.
 
 ---
 
@@ -69,7 +69,7 @@ Switch serves as the central operational backbone and multi-agent coordination l
 [ Human Moderator Decision ]
   ├── Verifies moderator server permissions (ManageMessages / Moderate / Kick / Ban)
   ├── Verifies Discord role hierarchy (Moderator > Target, Bot > Target)
-  ├── If "Take Action": Opens modal for Punishment choice, Duration, Reason, Evidence
+  ├── If "Take Action": Opens modal for Punishment choice, Duration, Reason, optional Notes
   ├── If "Dismiss Report": Executes dismissal resolution workflow
   ├── Dispatches Pre-Action DM notice to target member
   ├── Executes Discord moderation action via API (Timeout, Kick, Ban, Warn)
@@ -102,29 +102,28 @@ Switch serves as the central operational backbone and multi-agent coordination l
 - **Zero Agent Autonomy for Punishments:** AI agents advise; human moderators decide. Agents cannot kick, ban, or timeout members.
 - **Role Hierarchy Enforcement:** Ensures neither the moderator nor the bot can act against a user with equal or higher role position, preventing privilege escalation conflicts.
 - **Two-Tier Discord Permission Verification:** Validates server-side that the clicking moderator possesses the required native Discord permissions (`ModerateMembers`, `KickMembers`, `BanMembers`, `ManageMessages`).
-- **Configurable Evidence Policy (`/settings`):** When enabled, users submitting reports must provide proof files (screenshots or documents); submissions lacking valid evidence are rejected at intake.
+- **Configurable Evidence Policy (`/settings`):** When enabled, users submitting reports against members must provide proof files (screenshots or documents); submissions lacking valid evidence are rejected at intake. Evidence is never required from moderators taking moderation actions.
 
 ### 5. Streamlined "Take Action" Modal & Execution
 - **Comprehensive Decision Modal:** Clicking **Take Action** on the Phase 3 container opens an interactive modal with:
   - **Punishment Selection:** Native String Select menu to choose Warn, Mute/Timeout, Kick, or Ban.
   - **Duration:** Input for timeout duration (`10m`, `1h`, `24h`, `7d`, max 28d) parsed and validated via `parseDuration`.
   - **Reason:** Pre-filled with the report reason, editable for official moderation records.
-  - **Evidence:** Governed by the server's Require Evidence policy.
+  - **Notes / Context:** Optional input for moderator records (evidence is never required from moderators).
 - **One-Click Dismissal:** Clicking **Dismiss Report** verifies permissions, closes the case, logs the dismissal, and updates the container in place without sending extraneous messages.
 
 ### 6. Interactive Agent Q&A in Discord Threads
 - **Direct Thread Mentions:** Moderators can ask clarifying questions directly inside the Discord report thread using `@investigator`, `@triage`, `@advisor`, or bot mentions.
 - **Dynamic Switch Room Routing:** Questions are forwarded to the report's Switch room, answered by the targeted agent, and rendered with real-time progress indicators.
-- **Milestone Persistence:** Follow-up questions and agent explanations are stored in SQLite and included in subsequent case audit exports.
+- **Milestone Persistence:** Follow-up questions and agent explanations are stored in SQLite and displayed in the thread timeline.
 
 ### 7. Pre-Action Member Notifications
 - **Fair Notice Delivery:** Target members receive an official DM detailing the alleged violation, server name, and moderator reason before punitive actions (Timeout, Kick, Ban, Warn) take effect.
 - **Closed DM Resilience:** If a target member has DMs disabled, the system catches the error gracefully, proceeds with the moderation action, and records the delivery state in the audit log.
 
-### 8. Case Audit Transcript Export & Recidivism Tracking
-- **One-Click Audit Dossier:** Moderators can click the "Export Case Audit" button on any resolved report to receive an instant, downloadable Markdown transcript (`verity_audit_<code\>.md`).
-- **Complete Chain of Custody:** The dossier aggregates report intake metadata, SHA-256 binary evidence checksums, all multi-agent milestones, and the human moderation authorization timestamp.
+### 8. Recidivism Tracking & Disciplinary History
 - **Recidivism Tracking:** The investigation brief automatically injects the user's past disciplinary history from SQLite, giving Switch agents full context on repeat offenses.
+- **Automated Case Code Generation:** Unique sequential report codes (`V-001`, `V-002`, etc.) and internal UUIDs are automatically assigned, tracked, and retrieved by Verity without manual user entry.
 
 ---
 
@@ -150,7 +149,7 @@ Verity utilizes three specialized agents configured in the Switch workspace:
 | **Chat Platform** | Discord.js (v14.17+), Components V2 | Context menus, modals, containers, channel selects, checkboxes, buttons. |
 | **Database** | Node SQLite (`node:sqlite` WAL mode) | High-performance atomic storage for intake sessions, reports, settings, and logs. |
 | **Security & Forensics** | Node Crypto (`node:crypto`) | SHA-256 binary hashing, session UUID tokens, and magic byte detection. |
-| **Testing** | Node Native Test Runner (`node:test`, `node:assert`) | 50 automated tests covering intake security, parsers, containers, and client flows. |
+| **Testing** | Node Native Test Runner (`node:test`, `node:assert`) | 49 automated tests covering intake security, parsers, containers, and client flows. |
 
 ---
 
@@ -187,14 +186,13 @@ verity/
 │   ├── evidence/
 │   │   └── validator.ts                        # Magic byte inspection, SHA-256 & memory buffers
 │   ├── investigation/
-│   │   ├── orchestrator.ts                     # Switch room lifecycle & 3-phase handoff coordinator
-│   │   └── auditExporter.ts                    # Incident audit dossier generator (Markdown)
+│   │   └── orchestrator.ts                     # Switch room lifecycle & 3-phase handoff coordinator
 │   └── switch/
 │       └── switchClient.ts                     # Switch Gateway REST client & polling manager
 ├── test/
 │   ├── actionButtonHandler.test.ts             # Moderator authorization & resolution persistence
 │   ├── componentsV2.test.ts                    # Components V2 payload layout & styling
-│   ├── enhancedFeatures.test.ts                # Thread Q&A, audit exporter & disciplinary history
+│   ├── enhancedFeatures.test.ts                # Thread Q&A, in-place resolution & disciplinary history
 │   ├── evidenceValidator.test.ts               # Magic byte checks, file bounds & path traversal safety
 │   ├── intakeFlowE2E.test.ts                   # Full end-to-end report lifecycle simulation
 │   ├── intakeSession.test.ts                   # Intake session creation, replay prevention & TTL
@@ -246,6 +244,7 @@ Populate the configuration values:
 DISCORD_TOKEN=your_bot_token_here
 DISCORD_CLIENT_ID=your_application_client_id_here
 DISCORD_GUILD_ID=your_testing_guild_id_here
+# (Optional) Fallback Reports Channel ID if not configured via /settings
 DISCORD_REPORTS_CHANNEL_ID=your_reports_channel_id_here
 
 # Database Configuration
@@ -260,9 +259,11 @@ SWITCH_AGENT_INVESTIGATOR_ID=9f7e0e8f-c00b-4734-b25d-473b06513c10
 SWITCH_AGENT_ADVISOR_ID=9646eee2-cea5-436e-9aba-8a3a2040b1d7
 ```
 
+> **Note on Report ID & Channel Handling:** Report IDs (`V-001`, `V-002`, etc.) and internal UUIDs are generated, indexed, and retrieved completely automatically from SQLite. No manual report ID configuration or entry is required. The reports channel is dynamically resolved via `/settings`, server channel auto-discovery (`#reports`), or optional environment fallback.
+
 ### 3. Run Automated Tests
 
-Verity includes an extensive suite of 50 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, Take Action modal execution, and case audit export:
+Verity includes an extensive suite of 49 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, and Take Action modal execution:
 
 ```bash
 npm test
@@ -270,9 +271,9 @@ npm test
 
 Expected output:
 ```
-ℹ tests 50
+ℹ tests 49
 ℹ suites 10
-ℹ pass 50
+ℹ pass 49
 ℹ fail 0
 ```
 
@@ -300,7 +301,7 @@ Upon startup, Verity registers the `Report Message` context-menu command and `/s
    - Run `/settings` in any server channel to open the configuration modal.
    - Select the designated **Report Channel** where reports and investigation threads will be routed.
    - (Optional) Select an **Action Log Channel** for moderation audit logs.
-   - Toggle **Require Evidence** to control whether users must attach proof files when submitting reports.
+   - Toggle **Require Evidence** to control whether users submitting reports must attach proof files.
 2. **Submit a Report (`Report Message`):**
    - Right-click any message in a server channel -> **Apps** -> **Report Message**.
    - Enter a detailed reason (15 to 1,000 characters) explaining the server rule violated.
@@ -320,11 +321,10 @@ Upon startup, Verity registers the `Report Message` context-menu command and `/s
      - Select punishment: Warn, Mute/Timeout, Kick, or Ban.
      - Set duration for timeouts (e.g. `10m`, `1h`, `24h`, `7d`).
      - Edit or confirm the official moderation reason.
-     - Provide additional evidence links if required by server policy.
+     - (Optional) Provide additional context or proof notes for records.
    - Clicking **Dismiss Report** executes the standard dismissal workflow.
-6. **Execution, In-Place Resolution & Audit Export:**
+6. **Execution & In-Place Resolution:**
    - Verity enforces moderator permissions and role hierarchy, executes the action via Discord API, sends a pre-action DM to the target member, logs the event to the action log channel, and updates the thread container in place to Emerald Green (`#22C55E`).
-   - Click **Export Case Audit** to download the complete Markdown audit dossier (`verity_audit_<code\>.md`).
 
 ---
 
@@ -333,9 +333,9 @@ Upon startup, Verity registers the `Report Message` context-menu command and `/s
 | Judging Pillar | How Verity Meets & Exceeds Criteria |
 | :--- | :--- |
 | **Use of Switch** | Switch is central to the entire operational loop: isolated per-report room creation (`report-<code\>`), multi-agent phased pipeline handoff, activity stream completion polling, live thread Q&A routing, and closed-loop resolution synchronization. |
-| **Technical Execution** | 50 passing unit and integration tests across 10 test suites; robust error handling; in-memory binary magic byte validation; zero disk binary persistence; cryptographic anti-replay intake sessions; SQLite WAL concurrency; TypeScript strict typing. |
+| **Technical Execution** | 49 passing unit and integration tests across 10 test suites; robust error handling; in-memory binary magic byte validation; zero disk binary persistence; cryptographic anti-replay intake sessions; SQLite WAL concurrency; TypeScript strict typing. |
 | **Creativity & Impact** | Directly targets community moderator burnout and arbitrary enforcement. Replaces chaotic manual moderation with a professional, auditable business case workflow while guaranteeing that AI agents never possess autonomous punishment powers. |
-| **Presentation & Polish** | Pure Discord Components V2 implementation with neutral container layouts, meaningful alert accents (Crimson Red / Emerald Green), in-place message editing, full setup guide, and one-click downloadable case audit transcripts. |
+| **Presentation & Polish** | Pure Discord Components V2 implementation with neutral container layouts, meaningful alert accents (Crimson Red / Emerald Green), in-place message editing, and full setup guide. |
 
 ---
 

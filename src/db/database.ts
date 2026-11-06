@@ -136,11 +136,13 @@ export class Database {
     guildId: string;
     reportsChannelId: string;
     actionLogChannelId?: string | null;
-    requireEvidence: boolean;
+    requireEvidence?: boolean;
   }): GuildSettings {
+    const existing = this.getGuildSettings(params.guildId);
     const now = Date.now();
-    const actionLogChannelId = params.actionLogChannelId ?? null;
-    const requireEvidenceInt = params.requireEvidence ? 1 : 0;
+    const actionLogChannelId = params.actionLogChannelId !== undefined ? params.actionLogChannelId : existing.actionLogChannelId;
+    const requireEvidence = params.requireEvidence !== undefined ? params.requireEvidence : existing.requireEvidence;
+    const requireEvidenceInt = requireEvidence ? 1 : 0;
 
     const stmt = this.db.prepare(`
       INSERT INTO guild_settings (guild_id, reports_channel_id, action_log_channel_id, require_evidence, updated_at)
@@ -164,7 +166,7 @@ export class Database {
       guildId: params.guildId,
       reportsChannelId: params.reportsChannelId,
       actionLogChannelId,
-      requireEvidence: params.requireEvidence,
+      requireEvidence,
       updatedAt: now
     };
   }
@@ -277,10 +279,19 @@ export class Database {
   // --- Reports ---
 
   public getNextReportCode(): string {
-    const stmt = this.db.prepare('SELECT COUNT(*) as count FROM reports');
-    const result = stmt.get() as any;
-    const nextNum = (result?.count ?? 0) + 1;
-    return `V-${String(nextNum).padStart(3, '0')}`;
+    try {
+      const stmt = this.db.prepare(
+        "SELECT MAX(CAST(SUBSTR(report_code, 3) AS INTEGER)) as max_num FROM reports WHERE report_code LIKE 'V-%'"
+      );
+      const result = stmt.get() as any;
+      const nextNum = (result?.max_num && !isNaN(result.max_num) ? result.max_num : 0) + 1;
+      return `V-${String(nextNum).padStart(3, '0')}`;
+    } catch {
+      const stmt = this.db.prepare('SELECT COUNT(*) as count FROM reports');
+      const result = stmt.get() as any;
+      const nextNum = (result?.count ?? 0) + 1;
+      return `V-${String(nextNum).padStart(3, '0')}`;
+    }
   }
 
   public createReport(params: {

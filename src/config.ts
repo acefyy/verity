@@ -37,7 +37,6 @@ export function validateConfig(cfg: Config = config): void {
   const missing: string[] = [];
   if (!cfg.discordToken) missing.push('DISCORD_TOKEN');
   if (!cfg.discordClientId) missing.push('DISCORD_CLIENT_ID');
-  if (!cfg.reportsChannelId) missing.push('DISCORD_REPORTS_CHANNEL_ID');
 
   if (missing.length > 0) {
     console.warn(`[Config] Notice: Missing environment variables: ${missing.join(', ')}. Set these in .env for live Discord bot operation.`);

@@ -4,7 +4,7 @@ import { Database } from '../src/db/database.js';
 import { settingsCommandData } from '../src/discord/commands/settingsCommand.js';
 import {
   buildSettingsModal,
-  buildActionEvidenceModal
+  buildTakeActionModal
 } from '../src/discord/components/settingsModalBuilder.js';
 import {
   buildActionLogContainer,
@@ -249,7 +249,7 @@ describe('Settings Module & Moderation Workflow Tests', () => {
     assert.equal(dismissLog.components[0].accent_color, undefined);
   });
 
-  test('buildActionEvidenceModal adjusts required state based on report evidence availability', () => {
+  test('buildTakeActionModal keeps evidence input optional for moderators', () => {
     const mockReport: Report = {
       id: 'rep_evidence_test',
       reportCode: 'V-050',
@@ -265,15 +265,12 @@ describe('Settings Module & Moderation Workflow Tests', () => {
       updatedAt: Date.now()
     };
 
-    // When report has NO evidence, proof field is strictly required
-    const modalNoEvidence = buildActionEvidenceModal(mockReport, 'ban', false);
-    assert.equal(modalNoEvidence.components[0].component.required, true);
-    assert.equal(modalNoEvidence.components[0].component.min_length, 10);
-
-    // When report already HAS evidence, proof field is optional additional context
-    const modalWithEvidence = buildActionEvidenceModal(mockReport, 'ban', true);
-    assert.equal(modalWithEvidence.components[0].component.required, false);
-    assert.equal(modalWithEvidence.components[0].component.min_length, 0);
+    // Moderator action modal always has optional evidence input
+    const modal = buildTakeActionModal({ report: mockReport });
+    const evidenceField = modal.components.find((c: any) => c.component.custom_id === 'verity:field:action_evidence');
+    assert.ok(evidenceField);
+    assert.equal(evidenceField.component.required, false);
+    assert.equal(evidenceField.component.min_length, 0);
   });
 
   test('evidence requirement logic enforces evidence submission when required', () => {

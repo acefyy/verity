@@ -41,8 +41,7 @@ describe('Take Action Modal, Evidence Settings & Duration Parsing Tests', () => 
 
   test('buildTakeActionModal generates 4 components wrapped in Labels with correct defaults', () => {
     const modal = buildTakeActionModal({
-      report: mockReport,
-      requireEvidence: false
+      report: mockReport
     });
 
     assert.equal(modal.title, 'Take Action: V-099');
@@ -78,26 +77,25 @@ describe('Take Action Modal, Evidence Settings & Duration Parsing Tests', () => 
     assert.equal(reasonField.component.value, mockReport.reason);
     assert.equal(reasonField.component.required, true);
 
-    // 4. Evidence text input when requireEvidence is false
+    // 4. Evidence text input is always optional for moderators
     const evidenceField = modal.components[3];
     assert.equal(evidenceField.type, 18);
-    assert.equal(evidenceField.label, 'Evidence & Proof (Optional)');
+    assert.equal(evidenceField.label, 'Evidence & Notes (Optional)');
     assert.equal(evidenceField.component.type, 4);
     assert.equal(evidenceField.component.custom_id, 'verity:field:action_evidence');
     assert.equal(evidenceField.component.required, false);
     assert.equal(evidenceField.component.min_length, 0);
   });
 
-  test('buildTakeActionModal enforces required evidence when requireEvidence is true', () => {
+  test('buildTakeActionModal never requires evidence from moderators', () => {
     const modal = buildTakeActionModal({
-      report: mockReport,
-      requireEvidence: true
+      report: mockReport
     });
 
     const evidenceField = modal.components[3];
-    assert.equal(evidenceField.label, 'Evidence & Proof (Required)');
-    assert.equal(evidenceField.component.required, true);
-    assert.equal(evidenceField.component.min_length, 5);
+    assert.equal(evidenceField.label, 'Evidence & Notes (Optional)');
+    assert.equal(evidenceField.component.required, false);
+    assert.equal(evidenceField.component.min_length, 0);
   });
 
   test('buildReportModal honors requireEvidence boolean setting', () => {

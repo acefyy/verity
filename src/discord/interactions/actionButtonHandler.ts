@@ -2,16 +2,11 @@ import {
   ButtonInteraction,
   GuildMember,
   PermissionFlagsBits,
-  MessageFlags,
-  AttachmentBuilder
+  MessageFlags
 } from 'discord.js';
 import { db } from '../../db/database.js';
-import {
-  buildTakeActionModal,
-  buildActionEvidenceModal
-} from '../components/settingsModalBuilder.js';
+import { buildTakeActionModal } from '../components/settingsModalBuilder.js';
 import { executeModerationResolution } from './actionExecution.js';
-import { generateCaseAuditMarkdown } from '../../investigation/auditExporter.js';
 
 export async function handleActionButton(interaction: ButtonInteraction): Promise<void> {
   const customId = interaction.customId;
@@ -36,26 +31,6 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
       content: '❌ Report record not found in database.',
       flags: MessageFlags.Ephemeral
     });
-    return;
-  }
-
-  // Export Case Audit Action
-  if (action === 'export') {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    try {
-      const auditText = generateCaseAuditMarkdown(report.id);
-      const file = new AttachmentBuilder(Buffer.from(auditText, 'utf8'), {
-        name: `verity_audit_${report.reportCode.toLowerCase()}.md`
-      });
-      await interaction.editReply({
-        content: `📋 **Case Audit Transcript: Report \`${report.reportCode}\`**\nDownload the complete multi-agent investigation transcript, evidence hashes, and human authorization record below:`,
-        files: [file]
-      });
-    } catch (err: any) {
-      await interaction.editReply({
-        content: `❌ Failed to generate case audit transcript: ${err.message}`
-      });
-    }
     return;
   }
 
@@ -105,10 +80,8 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
       return;
     }
 
-    const settings = db.getGuildSettings(guild.id);
     const modalPayload = buildTakeActionModal({
-      report,
-      requireEvidence: settings.requireEvidence
+      report
     });
     await (interaction as any).showModal(modalPayload);
     return;
@@ -135,7 +108,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
     return;
   }
 
-  // Fallback for legacy direct action buttons (warn, timeout, kick, ban)
+  // Fallback for direct action buttons (warn, timeout, kick, ban)
   if (action === 'ban' && !isOwner && !hasAdmin && !hasBan) {
     await interaction.reply({
       content: '🚫 Authorization failed: You lack the `Ban Members` permission required to ban members.',
@@ -165,18 +138,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
     return;
   }
 
-  // Check guild settings for requireEvidence
-  const settings = db.getGuildSettings(guild.id);
-  const evidenceList = db.getEvidenceByReportId(report.id);
-  const hasReportEvidence = evidenceList.length > 0;
-
-  if (settings.requireEvidence) {
-    const modalPayload = buildActionEvidenceModal(report, action, hasReportEvidence);
-    await (interaction as any).showModal(modalPayload);
-    return;
-  }
-
-  // Otherwise, fast-path direct execution
+  // Direct execution for fallback buttons
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   await executeModerationResolution({
     interaction,

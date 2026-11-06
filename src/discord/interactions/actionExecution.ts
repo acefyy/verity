@@ -202,15 +202,14 @@ export async function executeModerationResolution(
   const milestones = db.getInvestigationMilestones(report.id);
   const advisorMilestone = milestones.find((m) => m.phase.includes('Advisor'));
 
-  // Update Action Container in place with Export Case Audit button
+  // Update Action Container in place with resolution status
   const resolvedPayload = buildResolvedActionContainer({
     report,
     advisorContent: advisorMilestone?.content,
     actionTaken: action,
     moderatorId: interaction.user.id,
     officialReason,
-    executedAt,
-    includeExportButton: true
+    executedAt
   });
 
   try {

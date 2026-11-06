@@ -135,7 +135,6 @@ export function buildPhase3Container(
 /**
  * In-place updated Action Container for when a report is Resolved.
  * Replaces the action buttons with the official resolution outcome in Emerald Green (0x22C55E).
- * Optionally provides an "Export Case Audit" button.
  */
 export function buildResolvedActionContainer(params: {
   report: Report;
@@ -144,7 +143,6 @@ export function buildResolvedActionContainer(params: {
   moderatorId: string;
   officialReason: string;
   executedAt: number;
-  includeExportButton?: boolean;
 }) {
   const actionTitle = params.actionTaken.toUpperCase();
   const timeSeconds = Math.floor(params.executedAt / 1000);
@@ -173,20 +171,6 @@ export function buildResolvedActionContainer(params: {
       `> **Official Reason:**\n> ${params.officialReason}\n\n` +
       `*Investigation completed. Action authorized and synchronized with Switch.*`
   });
-
-  if (params.includeExportButton) {
-    containerComponents.push({
-      type: 1, // Action Row
-      components: [
-        {
-          type: 2, // Button
-          style: 2, // Secondary / Gray
-          label: 'Export Case Audit',
-          custom_id: `verity:act:export:${params.report.id}`
-        }
-      ]
-    });
-  }
 
   return {
     flags: IS_COMPONENTS_V2,
