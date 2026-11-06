@@ -175,7 +175,7 @@ export async function handleSettingsModalSubmit(
     '',
     `- **Report Channel:** <#${reportsChannelId}>`,
     `- **Action Log Channel:** ${validActionLogId ? `<#${validActionLogId}>` : '*Not configured (Disabled)*'}`,
-    `- **Require Evidence for Actions:** \`${requireEvidence ? 'Enabled (Required)' : 'Disabled'}\``,
+    `- **Require Evidence for Reports:** \`${requireEvidence ? 'Enabled (Required)' : 'Disabled'}\``,
     warningSection
   ].join('\n');
 

@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Events, MessageFlags } from 'discord.js';
 import { handleReportContextMenu } from './interactions/contextMenuHandler.js';
 import {
   handleReportModalSubmit,
+  handleTakeActionModalSubmit,
   handleActionEvidenceModalSubmit
 } from './interactions/modalSubmitHandler.js';
 import { handleActionButton } from './interactions/actionButtonHandler.js';
@@ -47,6 +48,8 @@ export function createDiscordClient(): Client {
           await handleReportModalSubmit(interaction);
         } else if (interaction.customId === 'verity:modal:settings') {
           await handleSettingsModalSubmit(interaction);
+        } else if (interaction.customId.startsWith('verity:modal:take_action:')) {
+          await handleTakeActionModalSubmit(interaction);
         } else if (interaction.customId.startsWith('verity:modal:action_evidence:')) {
           await handleActionEvidenceModalSubmit(interaction);
         }
@@ -60,7 +63,7 @@ export function createDiscordClient(): Client {
       if (interaction.isRepliable()) {
         const errorMsg = {
           content: '❌ An unexpected error occurred while processing this interaction.',
-          flags: MessageFlags.Ephemeral
+          ephemeral: true
         };
         if (interaction.deferred || interaction.replied) {
           await interaction.followUp(errorMsg).catch(() => {});

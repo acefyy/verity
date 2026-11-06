@@ -33,7 +33,7 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(payload.flags, IS_COMPONENTS_V2);
     const container = payload.components[0];
     assert.equal(container.type, 17);
-    assert.equal(container.accent_color, undefined);
+    assert.equal((container as any).accent_color, undefined);
 
     const textComp = container.components[0];
     assert.equal(textComp.type, 10);
@@ -49,7 +49,7 @@ describe('Investigation Components V2 Container Specifications', () => {
 
     const container = payload.components[0];
     assert.equal(container.type, 17); // Container
-    assert.equal(container.accent_color, undefined); // Neutral container: no decorative accent
+    assert.equal((container as any).accent_color, undefined); // Neutral container: no decorative accent
 
     const textComp = container.components[0];
     assert.equal(textComp.type, 10); // ComponentType.TEXT_DISPLAY
@@ -63,7 +63,7 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.equal(payload.flags, IS_COMPONENTS_V2);
     const container = payload.components[0];
     assert.equal(container.type, 17);
-    assert.equal(container.accent_color, undefined); // Neutral container
+    assert.equal((container as any).accent_color, undefined); // Neutral container
 
     const textComp = container.components[0];
     assert.equal(textComp.type, 10); // ComponentType.TEXT_DISPLAY
@@ -71,37 +71,33 @@ describe('Investigation Components V2 Container Specifications', () => {
     assert.ok(textComp.content.includes('report-investigator'));
   });
 
-  test('Phase 3 container uses type 10 (TEXT_DISPLAY) and includes 5 Action Row decision buttons', () => {
+  test('Phase 3 container uses type 10 (TEXT_DISPLAY) and includes exactly 2 Action Row decision buttons', () => {
     const payload = buildPhase3Container(mockReport, 'Recommended action: Warn member.');
 
     assert.equal(payload.flags, IS_COMPONENTS_V2);
     const container = payload.components[0];
     assert.equal(container.type, 17);
-    assert.equal(container.accent_color, undefined);
+    assert.equal((container as any).accent_color, undefined);
 
     const textComp = container.components.find((c: any) => c.type === 10);
     assert.ok(textComp, 'Text display must be present with type 10');
     assert.ok(textComp.content.includes('Phase 3: Moderation Advisor Recommendation'));
+    // Ensure clutter lines are removed
+    assert.ok(!textComp.content.includes('Recommended by Switch Agent moderation-advisor'));
+    assert.ok(!textComp.content.includes('Human Decision Required'));
 
     const actionRow = container.components.find((c: any) => c.type === 1);
     assert.ok(actionRow, 'Action row must be present');
-    assert.equal(actionRow.components.length, 5); // Dismiss, Warn, Mute/Timeout, Kick, Ban
+    assert.equal(actionRow.components.length, 2); // Take Action, Dismiss Report
 
     const buttons = actionRow.components;
-    assert.equal(buttons[0].custom_id, `verity:act:dismiss:${mockReport.id}`);
-    assert.equal(buttons[0].style, 2); // Secondary / Gray
+    assert.equal(buttons[0].label, 'Take Action');
+    assert.equal(buttons[0].custom_id, `verity:act:take_action:${mockReport.id}`);
+    assert.equal(buttons[0].style, 1); // Primary / Blurple
 
-    assert.equal(buttons[1].custom_id, `verity:act:warn:${mockReport.id}`);
-    assert.equal(buttons[1].style, 1); // Primary
-
-    assert.equal(buttons[2].custom_id, `verity:act:timeout:${mockReport.id}`);
-    assert.equal(buttons[2].style, 1); // Primary
-
-    assert.equal(buttons[3].custom_id, `verity:act:kick:${mockReport.id}`);
-    assert.equal(buttons[3].style, 4); // Danger / Red
-
-    assert.equal(buttons[4].custom_id, `verity:act:ban:${mockReport.id}`);
-    assert.equal(buttons[4].style, 4); // Danger / Red
+    assert.equal(buttons[1].label, 'Dismiss Report');
+    assert.equal(buttons[1].custom_id, `verity:act:dismiss:${mockReport.id}`);
+    assert.equal(buttons[1].style, 2); // Secondary / Gray
   });
 
   test('Resolved action container enforces Emerald Green accent (0x22C55E) and removes action buttons', () => {

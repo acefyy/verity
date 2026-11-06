@@ -27,6 +27,8 @@ export interface ExecuteActionParams {
   guild: Guild;
   customReason?: string;
   moderatorEvidence?: string;
+  durationMs?: number;
+  durationLabel?: string;
 }
 
 export async function executeModerationResolution(
@@ -39,7 +41,9 @@ export async function executeModerationResolution(
     moderatorMember,
     guild,
     customReason,
-    moderatorEvidence
+    moderatorEvidence,
+    durationMs,
+    durationLabel
   } = params;
 
   const isOwner = guild.ownerId === interaction.user.id;
@@ -127,15 +131,17 @@ export async function executeModerationResolution(
       if (!targetMember) {
         throw new Error('Target member is not currently in the server and cannot be timed out.');
       }
-      officialReason = `24-hour timeout (mute) applied for: ${baseReason}`;
+      const appliedMs = durationMs || 24 * 60 * 60 * 1000;
+      const appliedLabel = durationLabel || '24-hour';
+      officialReason = `${appliedLabel} timeout (mute) applied for: ${baseReason}`;
       if (targetMember) {
         await targetMember.send({
-          content: `⏳ **Verity Moderation Notice: ${guild.name}**\nA 24-hour timeout (mute) has been applied to your account following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}\nPlease review server rules during your timeout period.`
+          content: `⏳ **Verity Moderation Notice: ${guild.name}**\nA ${appliedLabel} timeout (mute) has been applied to your account following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}\nPlease review server rules during your timeout period.`
         }).catch(() => {
           // Member DMs might be closed
         });
       }
-      await targetMember.timeout(24 * 60 * 60 * 1000, `Verity [${report.reportCode}]: ${baseReason}`);
+      await targetMember.timeout(appliedMs, `Verity [${report.reportCode}]: ${baseReason}`);
     } else if (action === 'kick') {
       if (!targetMember) {
         throw new Error('Target member is not currently in the server and cannot be kicked.');
@@ -208,7 +214,19 @@ export async function executeModerationResolution(
   });
 
   try {
-    const messageToEdit = (interaction as any).message;
+    let messageToEdit = (interaction as any).message;
+    if (!messageToEdit && interaction.channel && interaction.channel.isThread()) {
+      const msgs = await interaction.channel.messages.fetch({ limit: 10 }).catch(() => null);
+      if (msgs) {
+        messageToEdit = [...msgs.values()].find((m) =>
+          m.components?.[0]?.type === 17 &&
+          (m.components?.[1] as any)?.components?.some((b: any) => {
+            const bId = b.customId || b.custom_id;
+            return bId && (bId.startsWith('verity:act:') || bId.startsWith('verity:modal:'));
+          })
+        );
+      }
+    }
     if (messageToEdit) {
       await messageToEdit.edit({
         flags: resolvedPayload.flags,

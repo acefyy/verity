@@ -21,12 +21,6 @@ export async function handleReportContextMenu(
   const reportedUserId = targetMessage.author.id;
   const reporterId = interaction.user.id;
 
-  // Prevent users from reporting their own messages if desired, or allow for testing
-  if (reporterId === reportedUserId) {
-    // We allow it or warn, but let's inform them in production
-    // (keeping it permissible for sandbox demo testing if needed)
-  }
-
   // Create server-side, one-time intake session (15-minute expiry)
   const session = db.createIntakeSession({
     reporterId,
@@ -37,8 +31,11 @@ export async function handleReportContextMenu(
     ttlMinutes: 15
   });
 
+  // Load server settings to determine if evidence is required for report submission
+  const settings = db.getGuildSettings(guildId);
+
   // Build the 2-field modal (Reason + File Upload) wrapped in Labels (Type 18)
-  const modalPayload = buildReportModal(session.sessionId, targetMessage.id);
+  const modalPayload = buildReportModal(session.sessionId, targetMessage.id, settings.requireEvidence);
 
   // Show the modal to the user
   await (interaction as any).showModal(modalPayload);

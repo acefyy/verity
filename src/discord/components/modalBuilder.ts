@@ -1,8 +1,13 @@
 /**
  * Builds the exact 2-field Discord Components V2 modal payload.
  * Wraps inputs inside ComponentType.LABEL (18).
+ * Honors the requireEvidence server configuration setting.
  */
-export function buildReportModal(sessionId: string, targetMessageId: string) {
+export function buildReportModal(
+  sessionId: string,
+  targetMessageId: string,
+  requireEvidence: boolean = false
+) {
   return {
     title: 'Report Message',
     custom_id: `verity:modal:report:${sessionId}`,
@@ -23,14 +28,16 @@ export function buildReportModal(sessionId: string, targetMessageId: string) {
       },
       {
         type: 18, // ComponentType.LABEL
-        label: 'Evidence & Screenshots (Optional)',
-        description: 'Attach up to 5 image or document files (Max 10MB each)',
+        label: requireEvidence ? 'Evidence & Screenshots (Required)' : 'Evidence & Screenshots (Optional)',
+        description: requireEvidence
+          ? 'Attach 1 to 5 image or document files (Required by server policy)'
+          : 'Attach up to 5 image or document files (Max 10MB each)',
         component: {
           type: 19, // ComponentType.FILE_UPLOAD
           custom_id: 'verity:field:proof_upload',
-          min_values: 0,
+          min_values: requireEvidence ? 1 : 0,
           max_values: 5,
-          required: false,
+          required: requireEvidence,
           file_types: ['image', '.png', '.jpg', '.jpeg', '.webp', '.pdf']
         }
       }

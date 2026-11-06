@@ -6,7 +6,10 @@ import {
   AttachmentBuilder
 } from 'discord.js';
 import { db } from '../../db/database.js';
-import { buildActionEvidenceModal } from '../components/settingsModalBuilder.js';
+import {
+  buildTakeActionModal,
+  buildActionEvidenceModal
+} from '../components/settingsModalBuilder.js';
 import { executeModerationResolution } from './actionExecution.js';
 import { generateCaseAuditMarkdown } from '../../investigation/auditExporter.js';
 
@@ -92,6 +95,47 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
   const hasBan = moderatorMember.permissions.has(PermissionFlagsBits.BanMembers);
   const hasManageMessages = moderatorMember.permissions.has(PermissionFlagsBits.ManageMessages);
 
+  // Take Action button opens comprehensive action modal
+  if (action === 'take_action') {
+    if (!isOwner && !hasAdmin && !hasModerate && !hasKick && !hasBan && !hasManageMessages) {
+      await interaction.reply({
+        content: '🚫 Authorization failed: You lack moderation permissions in this server.',
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    const settings = db.getGuildSettings(guild.id);
+    const modalPayload = buildTakeActionModal({
+      report,
+      requireEvidence: settings.requireEvidence
+    });
+    await (interaction as any).showModal(modalPayload);
+    return;
+  }
+
+  // Dismiss report follows existing dismissal workflow
+  if (action === 'dismiss') {
+    if (!isOwner && !hasAdmin && !hasModerate && !hasManageMessages) {
+      await interaction.reply({
+        content: '🚫 Authorization failed: You lack moderation permissions in this server.',
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await executeModerationResolution({
+      interaction,
+      report,
+      action: 'dismiss',
+      moderatorMember,
+      guild
+    });
+    return;
+  }
+
+  // Fallback for legacy direct action buttons (warn, timeout, kick, ban)
   if (action === 'ban' && !isOwner && !hasAdmin && !hasBan) {
     await interaction.reply({
       content: '🚫 Authorization failed: You lack the `Ban Members` permission required to ban members.',
@@ -113,7 +157,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
     });
     return;
   }
-  if ((action === 'warn' || action === 'dismiss') && !isOwner && !hasAdmin && !hasModerate && !hasManageMessages) {
+  if (action === 'warn' && !isOwner && !hasAdmin && !hasModerate && !hasManageMessages) {
     await interaction.reply({
       content: '🚫 Authorization failed: You lack moderation permissions in this server.',
       flags: MessageFlags.Ephemeral
@@ -126,8 +170,7 @@ export async function handleActionButton(interaction: ButtonInteraction): Promis
   const evidenceList = db.getEvidenceByReportId(report.id);
   const hasReportEvidence = evidenceList.length > 0;
 
-  // If evidence is required and action is punitive, present the Action Evidence modal
-  if (settings.requireEvidence && action !== 'dismiss') {
+  if (settings.requireEvidence) {
     const modalPayload = buildActionEvidenceModal(report, action, hasReportEvidence);
     await (interaction as any).showModal(modalPayload);
     return;

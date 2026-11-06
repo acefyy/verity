@@ -85,7 +85,7 @@ export function buildPhase2Container(report: Report, investigatorContent: string
 
 /**
  * Neutral Components V2 container for Phase 3: Moderation Advisor Recommendation
- * Features 5 interactive decision buttons for the human moderator (Dismiss, Warn, Mute/Timeout, Kick, Ban).
+ * Features 2 interactive decision buttons for the human moderator (Take Action, Dismiss Report).
  */
 export function buildPhase3Container(
   report: Report,
@@ -95,7 +95,7 @@ export function buildPhase3Container(
   const containerComponents: any[] = [
     {
       type: 10, // Text Display (type 10 in Components V2)
-      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${report.reportCode}\`\n\n${sanitizeContent(advisorContent)}\n\n*Recommended by Switch Agent \`moderation-advisor\`*\n\n> 👤 **Human Decision Required:** Select an action below to authorize and enforce moderation.`
+      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${report.reportCode}\`\n\n${sanitizeContent(advisorContent)}`
     }
   ];
 
@@ -105,37 +105,16 @@ export function buildPhase3Container(
       components: [
         {
           type: 2, // Button
+          style: 1, // Primary / Blurple
+          label: 'Take Action',
+          custom_id: `verity:act:take_action:${report.id}`,
+          disabled: options.disabled ?? false
+        },
+        {
+          type: 2, // Button
           style: 2, // Secondary / Gray
           label: 'Dismiss Report',
           custom_id: `verity:act:dismiss:${report.id}`,
-          disabled: options.disabled ?? false
-        },
-        {
-          type: 2, // Button
-          style: 1, // Primary / Blurple
-          label: 'Warn Member',
-          custom_id: `verity:act:warn:${report.id}`,
-          disabled: options.disabled ?? false
-        },
-        {
-          type: 2, // Button
-          style: 1, // Primary / Blurple
-          label: 'Mute / Timeout',
-          custom_id: `verity:act:timeout:${report.id}`,
-          disabled: options.disabled ?? false
-        },
-        {
-          type: 2, // Button
-          style: 4, // Danger / Red
-          label: 'Kick Member',
-          custom_id: `verity:act:kick:${report.id}`,
-          disabled: options.disabled ?? false
-        },
-        {
-          type: 2, // Button
-          style: 4, // Danger / Red
-          label: 'Ban Member',
-          custom_id: `verity:act:ban:${report.id}`,
           disabled: options.disabled ?? false
         }
       ]
@@ -175,7 +154,7 @@ export function buildResolvedActionContainer(params: {
   if (params.advisorContent) {
     containerComponents.push({
       type: 10, // Text Display
-      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${params.report.reportCode}\`\n\n${sanitizeContent(params.advisorContent)}\n\n*Recommended by Switch Agent \`moderation-advisor\`*`
+      content: `### ⚖️ Phase 3: Moderation Advisor Recommendation • Report \`${params.report.reportCode}\`\n\n${sanitizeContent(params.advisorContent)}`
     });
     containerComponents.push({
       type: 14, // Separator
