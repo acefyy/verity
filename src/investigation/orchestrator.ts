@@ -136,7 +136,7 @@ export async function runInvestigation(context: InvestigationContext): Promise<v
 
   const priorResolutions = db.getResolutionsForUser(report.reportedUserId);
   const priorHistoryText = priorResolutions.length > 0
-    ? priorResolutions.slice(0, 5).map((r) => `- [${new Date(r.executedAt * 1000).toISOString().split('T')[0]}] Action: ${r.actionTaken.toUpperCase()} - Reason: ${r.officialReason}`).join('\n')
+    ? priorResolutions.slice(0, 5).map((r) => `- [${new Date(r.executedAt > 1e11 ? r.executedAt : r.executedAt * 1000).toISOString().split('T')[0]}] Action: ${r.actionTaken.toUpperCase()} - Reason: ${r.officialReason}`).join('\n')
     : 'Clean history (no prior recorded violations)';
 
   const caseBrief =
