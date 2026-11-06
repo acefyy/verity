@@ -2,8 +2,6 @@
 
 Verity transforms Discord community moderation from chaotic, reactive policing into a structured, auditable business case management workflow powered by **Switch**.
 
-Submitted to the **Flip the Switch Hackathon** (Track 01: Best Business Workflow & Side Track: Best Blog).
-
 > 📖 **Read the Build Story on Dev.to:** [Verity: Three AI Agents Look into a Discord Report. A Human Makes the Call.](https://dev.to/acefy/verity-three-ai-agents-look-into-a-discord-report-a-human-makes-the-call-16de)
 
 ---
