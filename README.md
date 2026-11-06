@@ -46,6 +46,7 @@ Switch serves as the central operational backbone and multi-agent coordination l
        │
        ▼
 [ Discord #reports Channel ]
+  ├── Auto-provisioned on bot join with private permissions (hidden from @everyone)
   ├── Neutral Components V2 Container (Flags: 32768, Type 17)
   └── Dedicated Investigation Thread created automatically
        │
@@ -125,6 +126,9 @@ Switch serves as the central operational backbone and multi-agent coordination l
 - **Recidivism Tracking:** The investigation brief automatically injects the user's past disciplinary history from SQLite, giving Switch agents full context on repeat offenses.
 - **Automated Case Code Generation:** Unique sequential report codes (`V-001`, `V-002`, etc.) and internal UUIDs are automatically assigned, tracked, and retrieved by Verity without manual user entry.
 
+### 9. Automatic Channel Provisioning on Guild Join
+- **Instant Out-of-the-Box Setup:** When Verity is added to a server (or initializes on startup), it automatically provisions a secure, private `#reports` text channel with appropriate staff permissions (hidden from regular members via `@everyone` ViewChannel denial, with full management rights for Verity) and saves the channel ID in SQLite. Server staff are immediately ready to capture reports with zero manual channel creation.
+
 ---
 
 ## Switch Agent Specifications
@@ -149,7 +153,7 @@ Verity utilizes three specialized agents configured in the Switch workspace:
 | **Chat Platform** | Discord.js (v14.17+), Components V2 | Context menus, modals, containers, channel selects, checkboxes, buttons. |
 | **Database** | Node SQLite (`node:sqlite` WAL mode) | High-performance atomic storage for intake sessions, reports, settings, and logs. |
 | **Security & Forensics** | Node Crypto (`node:crypto`) | SHA-256 binary hashing, session UUID tokens, and magic byte detection. |
-| **Testing** | Node Native Test Runner (`node:test`, `node:assert`) | 49 automated tests covering intake security, parsers, containers, and client flows. |
+| **Testing** | Node Native Test Runner (`node:test`, `node:assert`) | 51 automated tests covering intake security, parsers, containers, and client flows. |
 
 ---
 
@@ -165,6 +169,7 @@ verity/
 │   │   └── schema.ts                           # Database table definitions and indices
 │   ├── discord/
 │   │   ├── client.ts                           # Discord client setup & interaction routing
+│   │   ├── guildSetup.ts                       # Auto-provisions private #reports channel on guild join
 │   │   ├── registerCommands.ts                 # Slash and context menu command registration
 │   │   ├── commands/
 │   │   │   ├── reportCommand.ts                # "Report Message" context menu definition
@@ -194,6 +199,7 @@ verity/
 │   ├── componentsV2.test.ts                    # Components V2 payload layout & styling
 │   ├── enhancedFeatures.test.ts                # Thread Q&A, in-place resolution & disciplinary history
 │   ├── evidenceValidator.test.ts               # Magic byte checks, file bounds & path traversal safety
+│   ├── guildSetup.test.ts                      # Auto-creation of private #reports channel on join
 │   ├── intakeFlowE2E.test.ts                   # Full end-to-end report lifecycle simulation
 │   ├── intakeSession.test.ts                   # Intake session creation, replay prevention & TTL
 │   ├── investigationContainers.test.ts         # Agent containers, 2 buttons & resolution styling
@@ -216,7 +222,7 @@ verity/
    - Create an application in the [Discord Developer Portal](https://discord.com/developers/applications).
    - Under **OAuth2**: select `bot` and `applications.commands` scopes.
    - Under **Privileged Gateway Intents**: enable `Guild Messages` and `Message Content`.
-   - Bot permissions required: `Manage Messages`, `Moderate Members`, `Kick Members`, `Ban Members`, `Send Messages`, `Create Public Threads`, `Attach Files`.
+   - Bot permissions required: `Manage Channels`, `Manage Messages`, `Moderate Members`, `Kick Members`, `Ban Members`, `Send Messages`, `Create Public Threads`, `Attach Files`.
 3. **Switch AI Gateway:**
    - A running Switch Gateway instance (e.g. `http://localhost:58014/gateway`).
    - Three agents registered with their IDs (`report-triage`, `report-investigator`, `moderation-advisor`).
@@ -259,11 +265,11 @@ SWITCH_AGENT_INVESTIGATOR_ID=9f7e0e8f-c00b-4734-b25d-473b06513c10
 SWITCH_AGENT_ADVISOR_ID=9646eee2-cea5-436e-9aba-8a3a2040b1d7
 ```
 
-> **Note on Report ID & Channel Handling:** Report IDs (`V-001`, `V-002`, etc.) and internal UUIDs are generated, indexed, and retrieved completely automatically from SQLite. No manual report ID configuration or entry is required. The reports channel is dynamically resolved via `/settings`, server channel auto-discovery (`#reports`), or optional environment fallback.
+> **Note on Automatic Provisioning & Report IDs:** When Verity is added to a server, it automatically provisions a secure, private `#reports` channel with staff-only permissions (hidden from `@everyone`) and saves it to SQLite. Report IDs (`V-001`, `V-002`, etc.) and internal UUIDs are generated, indexed, and retrieved completely automatically. Zero manual channel creation or ID configuration is required.
 
 ### 3. Run Automated Tests
 
-Verity includes an extensive suite of 49 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, and Take Action modal execution:
+Verity includes an extensive suite of 51 automated tests covering database operations, cryptographic intake sessions, magic byte validation, Switch REST client calls, Discord Components V2 formatting, server settings workflows, interactive thread Q&A, automatic channel provisioning, and Take Action modal execution:
 
 ```bash
 npm test
@@ -271,9 +277,9 @@ npm test
 
 Expected output:
 ```
-ℹ tests 49
-ℹ suites 10
-ℹ pass 49
+ℹ tests 51
+ℹ suites 11
+ℹ pass 51
 ℹ fail 0
 ```
 
@@ -297,11 +303,9 @@ Upon startup, Verity registers the `Report Message` context-menu command and `/s
 
 ## Verifying the Workflow in Discord
 
-1. **Configure Server Governance (`/settings`):**
-   - Run `/settings` in any server channel to open the configuration modal.
-   - Select the designated **Report Channel** where reports and investigation threads will be routed.
-   - (Optional) Select an **Action Log Channel** for moderation audit logs.
-   - Toggle **Require Evidence** to control whether users submitting reports must attach proof files.
+1. **Automatic Reports Channel Provisioning (`#reports`):**
+   - When Verity is invited to the server, it automatically provisions the private `#reports` channel with staff-only permissions.
+   - (Optional) Administrators can run `/settings` to customize routing, assign an Action Log Channel, or toggle the Require Evidence policy.
 2. **Submit a Report (`Report Message`):**
    - Right-click any message in a server channel -> **Apps** -> **Report Message**.
    - Enter a detailed reason (15 to 1,000 characters) explaining the server rule violated.
@@ -333,7 +337,7 @@ Upon startup, Verity registers the `Report Message` context-menu command and `/s
 | Judging Pillar | How Verity Meets & Exceeds Criteria |
 | :--- | :--- |
 | **Use of Switch** | Switch is central to the entire operational loop: isolated per-report room creation (`report-<code\>`), multi-agent phased pipeline handoff, activity stream completion polling, live thread Q&A routing, and closed-loop resolution synchronization. |
-| **Technical Execution** | 49 passing unit and integration tests across 10 test suites; robust error handling; in-memory binary magic byte validation; zero disk binary persistence; cryptographic anti-replay intake sessions; SQLite WAL concurrency; TypeScript strict typing. |
+| **Technical Execution** | 51 passing unit and integration tests across 11 test suites; robust error handling; in-memory binary magic byte validation; zero disk binary persistence; cryptographic anti-replay intake sessions; SQLite WAL concurrency; TypeScript strict typing. |
 | **Creativity & Impact** | Directly targets community moderator burnout and arbitrary enforcement. Replaces chaotic manual moderation with a professional, auditable business case workflow while guaranteeing that AI agents never possess autonomous punishment powers. |
 | **Presentation & Polish** | Pure Discord Components V2 implementation with neutral container layouts, meaningful alert accents (Crimson Red / Emerald Green), in-place message editing, and full setup guide. |
 

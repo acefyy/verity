@@ -22,6 +22,7 @@ import { runInvestigation } from '../../investigation/orchestrator.js';
 import { config } from '../../config.js';
 import { getModalInputValue, getModalSelectValue } from './modalParsers.js';
 import { executeModerationResolution } from './actionExecution.js';
+import { setupGuildReportsChannel } from '../guildSetup.js';
 
 export { getModalInputValue };
 
@@ -223,7 +224,7 @@ export async function handleReportModalSubmit(
     status: 'submitted'
   });
 
-  // 6. Resolve #reports channel from per-guild settings, environment fallback, or auto-discovery
+  // 6. Resolve #reports channel from per-guild settings or auto-provisioning
   const targetReportsChannelId = settings.reportsChannelId || config.reportsChannelId;
 
   let reportsChannel: TextChannel | null = null;
@@ -238,30 +239,14 @@ export async function handleReportModalSubmit(
     }
   }
 
-  // Auto-discovery fallback: search guild channels for an existing channel named reports
+  // If reports channel is missing or not configured, auto-create it with correct permissions
   if (!reportsChannel && interaction.guild) {
-    try {
-      const channels = await interaction.guild.channels.fetch().catch(() => null);
-      if (channels) {
-        const candidate = channels.find(
-          (c) => Boolean(c && c.isTextBased() && !c.isDMBased() && (c.name === 'reports' || c.name === 'verity-reports' || c.name === 'mod-reports'))
-        );
-        if (candidate) {
-          reportsChannel = candidate as TextChannel;
-          db.upsertGuildSettings({
-            guildId: interaction.guild.id,
-            reportsChannelId: reportsChannel.id
-          });
-        }
-      }
-    } catch {
-      // Continue
-    }
+    reportsChannel = await setupGuildReportsChannel(interaction.guild);
   }
 
   if (!reportsChannel) {
     await interaction.editReply({
-      content: `⚠️ Report \`${report.reportCode}\` recorded, but the designated #reports channel is missing or unconfigured. Please ask an administrator to run \`/settings\`.`
+      content: `⚠️ Report \`${report.reportCode}\` recorded, but could not access or create the #reports channel. Please verify Verity has "Manage Channels" permission.`
     });
     return;
   }

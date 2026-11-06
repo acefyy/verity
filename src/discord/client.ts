@@ -10,6 +10,7 @@ import {
   handleSettingsModalSubmit
 } from './interactions/settingsHandler.js';
 import { handleThreadMessage } from './interactions/threadQAHandler.js';
+import { setupGuildReportsChannel } from './guildSetup.js';
 
 export function createDiscordClient(): Client {
   const client = new Client({
@@ -20,8 +21,24 @@ export function createDiscordClient(): Client {
     ]
   });
 
-  client.on(Events.ClientReady, (readyClient) => {
+  client.on(Events.ClientReady, async (readyClient) => {
     console.log(`[Verity] Discord bot online as ${readyClient.user.tag}`);
+    for (const guild of readyClient.guilds.cache.values()) {
+      try {
+        await setupGuildReportsChannel(guild);
+      } catch (err) {
+        console.error(`[Verity] Failed to initialize report channel for guild ${guild.id}:`, err);
+      }
+    }
+  });
+
+  client.on(Events.GuildCreate, async (guild) => {
+    console.log(`[Verity] Joined new guild: ${guild.name} (${guild.id}). Auto-provisioning report channel...`);
+    try {
+      await setupGuildReportsChannel(guild);
+    } catch (err) {
+      console.error(`[Verity] Failed to auto-create report channel on guild join for ${guild.id}:`, err);
+    }
   });
 
   client.on(Events.MessageCreate, async (message) => {
