@@ -2,7 +2,9 @@
 
 Verity transforms Discord community moderation from chaotic, reactive policing into a structured, auditable business case management workflow powered by **Switch**.
 
-Submitted to the **Flip the Switch Hackathon** (Track 01: Best Business Workflow).
+Submitted to the **Flip the Switch Hackathon** (Track 01: Best Business Workflow & Side Track: Best Blog).
+
+> 📖 **Read the Build Story on Dev.to:** [Verity: Three AI Agents Look into a Discord Report. A Human Makes the Call.](https://dev.to/acefy/verity-three-ai-agents-look-into-a-discord-report-a-human-makes-the-call-16de)
 
 ---
 
@@ -329,6 +331,14 @@ Upon startup, Verity registers the `Report Message` context-menu command and `/s
    - Clicking **Dismiss Report** executes the standard dismissal workflow.
 6. **Execution & In-Place Resolution:**
    - Verity enforces moderator permissions and role hierarchy, executes the action via Discord API, sends a pre-action DM to the target member, logs the event to the action log channel, and updates the thread container in place to Emerald Green (`#22C55E`).
+
+---
+
+## Hackathon Submission & Build Story
+
+- **Primary Track:** Track 01: Best Business Workflow ($2,000)
+- **Side Track:** Best Blog (AirPods 5)
+- **Official Dev.to Blog Post:** [Verity: Three AI Agents Look into a Discord Report. A Human Makes the Call.](https://dev.to/acefy/verity-three-ai-agents-look-into-a-discord-report-a-human-makes-the-call-16de)
 
 ---
 
