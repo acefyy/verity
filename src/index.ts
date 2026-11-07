@@ -2,10 +2,18 @@ import { config, validateConfig } from './config.js';
 import { createDiscordClient } from './discord/client.js';
 import { db } from './db/database.js';
 import { runInvestigation } from './investigation/orchestrator.js';
+import { autoHealSwitchWatchers } from './switch/switchWatchdog.js';
 
 async function bootstrap() {
   console.log('--- Starting Verity (Discord & Switch Multi-Agent Moderation) ---');
   validateConfig();
+
+  // Run self-healing check on Switch agent watchers to recover from prior crashes or reboots
+  try {
+    autoHealSwitchWatchers();
+  } catch (healErr: any) {
+    console.warn(`[Verity] Switch watchdog notice: ${healErr?.message}`);
+  }
 
   if (!config.discordToken) {
     console.log('[Verity] No DISCORD_TOKEN found. Standalone mode ready for tests.');

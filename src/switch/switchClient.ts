@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
+import { autoHealSwitchWatchers } from './switchWatchdog.js';
 
 export interface SwitchClientOptions {
   apiUrl?: string;
@@ -188,6 +189,10 @@ export class SwitchClient {
    * Create an internal room for the report and bind the 3 investigation agents.
    */
   public async createRoom(reportCode: string, description: string): Promise<string> {
+    try {
+      autoHealSwitchWatchers({ silent: true });
+    } catch {}
+
     await this.ensureAuth();
 
     const roomPayload = {
