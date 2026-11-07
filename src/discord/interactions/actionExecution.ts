@@ -122,7 +122,7 @@ export async function executeModerationResolution(
       officialReason = `Official warning issued: Violation regarding "${baseReason}".`;
       if (targetMember) {
         await targetMember.send({
-          content: `⚠️ **Verity Moderation Notice: ${guild.name}**\nAn official warning was issued to your account following an investigation of Report \`${report.reportCode}\`.\n> **Alleged Violation:** ${baseReason}\nPlease review server rules to prevent further moderation action.`
+          content: `**You have been warned in ${guild.name}.**\n\nReason: ${baseReason}`
         }).catch(() => {
           // Member DMs might be closed
         });
@@ -136,7 +136,7 @@ export async function executeModerationResolution(
       officialReason = `${appliedLabel} timeout (mute) applied for: ${baseReason}`;
       if (targetMember) {
         await targetMember.send({
-          content: `⏳ **Verity Moderation Notice: ${guild.name}**\nA ${appliedLabel} timeout (mute) has been applied to your account following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}\nPlease review server rules during your timeout period.`
+          content: `**You have been muted in ${guild.name}.**\n\nReason: ${baseReason}`
         }).catch(() => {
           // Member DMs might be closed
         });
@@ -150,7 +150,7 @@ export async function executeModerationResolution(
       // Send DM before kick while user still shares server
       if (targetMember) {
         await targetMember.send({
-          content: `🚪 **Verity Moderation Notice: ${guild.name}**\nYou have been removed (kicked) from **${guild.name}** following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}`
+          content: `**You have been kicked from ${guild.name}.**\n\nReason: ${baseReason}`
         }).catch(() => {
           // Member DMs might be closed
         });
@@ -161,7 +161,7 @@ export async function executeModerationResolution(
       // Send DM before ban while user still shares server
       if (targetMember) {
         await targetMember.send({
-          content: `⛔ **Verity Moderation Notice: ${guild.name}**\nYou have been permanently banned from **${guild.name}** following an investigation of Report \`${report.reportCode}\`.\n> **Reason:** ${baseReason}`
+          content: `**You have been banned from ${guild.name}.**\n\nReason: ${baseReason}`
         }).catch(() => {
           // Member DMs might be closed
         });
