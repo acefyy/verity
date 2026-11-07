@@ -29,8 +29,9 @@ export async function handleSettingsCommand(
   const isOwner = guild.ownerId === interaction.user.id;
   const hasManageGuild = member?.permissions.has(PermissionFlagsBits.ManageGuild);
   const hasAdmin = member?.permissions.has(PermissionFlagsBits.Administrator);
+  const hasAdminRole = member?.roles?.cache?.some((r) => /admin|mod|staff|verity/i.test(r.name)) ?? false;
 
-  if (!isOwner && !hasManageGuild && !hasAdmin) {
+  if (!isOwner && !hasManageGuild && !hasAdmin && !hasAdminRole) {
     await interaction.reply({
       content: '🚫 Authorization failed: You need the "Manage Server" or "Administrator" permission to configure settings.',
       flags: MessageFlags.Ephemeral
@@ -89,8 +90,9 @@ export async function handleSettingsModalSubmit(
   const isOwner = guild.ownerId === interaction.user.id;
   const hasManageGuild = member?.permissions.has(PermissionFlagsBits.ManageGuild);
   const hasAdmin = member?.permissions.has(PermissionFlagsBits.Administrator);
+  const hasAdminRole = member?.roles?.cache?.some((r) => /admin|mod|staff|verity/i.test(r.name)) ?? false;
 
-  if (!isOwner && !hasManageGuild && !hasAdmin) {
+  if (!isOwner && !hasManageGuild && !hasAdmin && !hasAdminRole) {
     await interaction.editReply({
       content: '🚫 Authorization failed: You lack permissions to update server settings.'
     });

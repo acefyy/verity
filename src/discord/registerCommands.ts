@@ -3,9 +3,18 @@ import { reportCommandData } from './commands/reportCommand.js';
 import { settingsCommandData } from './commands/settingsCommand.js';
 import { config } from '../config.js';
 
-export async function registerCommands(): Promise<void> {
+/**
+ * Registers Verity application commands ("Report Message", "/settings")
+ * directly as server (guild) commands when the bot joins or initializes in a server.
+ */
+export async function registerGuildCommands(guildId: string): Promise<void> {
   if (!config.discordToken || !config.discordClientId) {
-    console.warn('[Verity] Cannot register slash/context commands: Missing DISCORD_TOKEN or DISCORD_CLIENT_ID.');
+    console.warn('[Verity] Cannot register server commands: Missing DISCORD_TOKEN or DISCORD_CLIENT_ID.');
+    return;
+  }
+
+  if (!guildId) {
+    console.warn('[Verity] Cannot register server commands: No guildId provided.');
     return;
   }
 
@@ -13,22 +22,41 @@ export async function registerCommands(): Promise<void> {
   const commands = [reportCommandData, settingsCommandData];
 
   try {
-    console.log('[Verity] Registering Discord application commands ("Report Message", "/settings")...');
+    console.log(`[Verity] Registering server commands ("Report Message", "/settings") to guild ${guildId}...`);
 
-    if (config.discordGuildId) {
+    try {
+      const existing = (await rest.get(
+        Routes.applicationGuildCommands(config.discordClientId, guildId)
+      )) as any[];
+
+      const verityNames = new Set(commands.map((c) => c.name));
+      const otherCommands = Array.isArray(existing)
+        ? existing.filter((c) => !verityNames.has(c.name))
+        : [];
+
       await rest.put(
-        Routes.applicationGuildCommands(config.discordClientId, config.discordGuildId),
+        Routes.applicationGuildCommands(config.discordClientId, guildId),
+        { body: [...otherCommands, ...commands] }
+      );
+      console.log(`[Verity] Successfully registered server commands to guild ${guildId}.`);
+    } catch {
+      await rest.put(
+        Routes.applicationGuildCommands(config.discordClientId, guildId),
         { body: commands }
       );
-      console.log(`[Verity] Successfully registered application commands to guild ${config.discordGuildId}.`);
-    } else {
-      await rest.put(
-        Routes.applicationCommands(config.discordClientId),
-        { body: commands }
-      );
-      console.log('[Verity] Successfully registered global application commands.');
+      console.log(`[Verity] Successfully registered server commands to guild ${guildId}.`);
     }
-  } catch (err) {
-    console.error('[Verity] Failed to register application commands:', err);
+  } catch (err: any) {
+    console.error(`[Verity] Failed to register server commands to guild ${guildId}:`, err?.message || err);
+  }
+}
+
+/**
+ * Backward compatibility wrapper.
+ */
+export async function registerCommands(targetGuildId?: string): Promise<void> {
+  const guildId = targetGuildId || config.discordGuildId;
+  if (guildId) {
+    await registerGuildCommands(guildId);
   }
 }

@@ -11,6 +11,7 @@ import {
 } from './interactions/settingsHandler.js';
 import { handleThreadMessage } from './interactions/threadQAHandler.js';
 import { setupGuildReportsChannel } from './guildSetup.js';
+import { registerGuildCommands } from './registerCommands.js';
 
 export function createDiscordClient(): Client {
   const client = new Client({
@@ -26,16 +27,18 @@ export function createDiscordClient(): Client {
     for (const guild of readyClient.guilds.cache.values()) {
       try {
         await setupGuildReportsChannel(guild);
+        await registerGuildCommands(guild.id);
       } catch (err) {
-        console.error(`[Verity] Failed to initialize report channel for guild ${guild.id}:`, err);
+        console.error(`[Verity] Failed to initialize guild ${guild.id}:`, err);
       }
     }
   });
 
   client.on(Events.GuildCreate, async (guild) => {
-    console.log(`[Verity] Joined new guild: ${guild.name} (${guild.id}). Auto-provisioning report channel...`);
+    console.log(`[Verity] Joined new guild: ${guild.name} (${guild.id}). Auto-provisioning report channel and registering server commands...`);
     try {
       await setupGuildReportsChannel(guild);
+      await registerGuildCommands(guild.id);
     } catch (err) {
       console.error(`[Verity] Failed to auto-create report channel on guild join for ${guild.id}:`, err);
     }

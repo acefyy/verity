@@ -1,6 +1,5 @@
 import { config, validateConfig } from './config.js';
 import { createDiscordClient } from './discord/client.js';
-import { registerCommands } from './discord/registerCommands.js';
 import { db } from './db/database.js';
 import { runInvestigation } from './investigation/orchestrator.js';
 
@@ -12,9 +11,6 @@ async function bootstrap() {
     console.log('[Verity] No DISCORD_TOKEN found. Standalone mode ready for tests.');
     return;
   }
-
-  // Register Context Menu command
-  await registerCommands();
 
   // Initialize and connect Discord Bot
   const client = createDiscordClient();
