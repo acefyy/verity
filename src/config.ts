@@ -25,7 +25,7 @@ export const config: Config = {
   databasePath: process.env.DATABASE_PATH || './verity.db',
 
   // Switch Gateway & Configured Agent IDs
-  switchApiUrl: process.env.SWITCH_API_URL || 'http://localhost:58014/gateway',
+  switchApiUrl: process.env.SWITCH_API_URL || 'http://127.0.0.1:58014/gateway',
   switchAdminEmail: process.env.SWITCH_ADMIN_EMAIL || 'admin@switch.local',
   switchAdminPassword: process.env.SWITCH_ADMIN_PASSWORD || 'Rpj9Wf2ozBA0cyg2XHLwBIxhLGkBICL3',
   switchAgentTriageId: process.env.SWITCH_AGENT_TRIAGE_ID || '7839ce54-ba74-4ccf-89d3-dd56412ff843',
