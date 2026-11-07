@@ -207,7 +207,7 @@ export function stripAgentMentions(
     cleaned = cleaned.replace(new RegExp(`@${escapedName}\\b`, 'gi'), '');
   }
 
-  const agentRegex = /@(report-investigator|report-triage|moderation-advisor|investigator|triage|advisor|verity)\b/gi;
+  const agentRegex = /@(report[-_]investigator|report[-_]triage|moderation[-_]advisor|investigator|triage|advisor|verity)\b/gi;
   cleaned = cleaned.replace(agentRegex, '');
 
   cleaned = cleaned.replace(/^[\s,:-]+/, '');
