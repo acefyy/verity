@@ -8,6 +8,8 @@ export interface SwitchClientOptions {
   agentTriageId?: string;
   agentInvestigatorId?: string;
   agentAdvisorId?: string;
+  maxRetries?: number;
+  retryDelayMs?: number;
 }
 
 export interface SwitchMessage {
@@ -29,6 +31,20 @@ export interface SwitchMessage {
   }>;
 }
 
+function cleanHttpErrorMessage(status: number, errText: string): string {
+  if (!errText) return `HTTP ${status}`;
+  if (errText.includes('<html') || errText.includes('<!DOCTYPE')) {
+    const titleMatch = errText.match(/<title>(.*?)<\/title>/i);
+    if (titleMatch && titleMatch[1]) {
+      const title = titleMatch[1].trim();
+      const cleanTitle = title.replace(new RegExp(`^${status}\\s*`, 'i'), '');
+      return cleanTitle || 'Gateway Error';
+    }
+    return 'Gateway Error';
+  }
+  return errText.length > 200 ? errText.slice(0, 200) + '...' : errText;
+}
+
 export class SwitchClient {
   private apiUrl: string;
   private adminEmail: string;
@@ -36,6 +52,8 @@ export class SwitchClient {
   public agentTriageId: string;
   public agentInvestigatorId: string;
   public agentAdvisorId: string;
+  private maxRetries: number;
+  private retryDelayMs: number;
 
   private token: string | null = null;
   private adminUserId: string | null = null;
@@ -47,13 +65,74 @@ export class SwitchClient {
     this.agentTriageId = options.agentTriageId || config.switchAgentTriageId;
     this.agentInvestigatorId = options.agentInvestigatorId || config.switchAgentInvestigatorId;
     this.agentAdvisorId = options.agentAdvisorId || config.switchAgentAdvisorId;
+    this.maxRetries = options.maxRetries ?? 5;
+    this.retryDelayMs = options.retryDelayMs ?? 1500;
+  }
+
+  /**
+   * Helper to perform fetch with automatic retry and backoff on transient gateway/server errors (502, 503, 504, 500)
+   * or temporary connection dropouts.
+   */
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    maxRetries: number = this.maxRetries,
+    initialDelayMs: number = this.retryDelayMs
+  ): Promise<Response> {
+    let lastError: Error | null = null;
+    let currentOptions: RequestInit = { ...options };
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, currentOptions);
+
+        // Handle 401 Unauthorized by re-authenticating and retrying with refreshed headers
+        if (res.status === 401 && !url.includes('/auth/login')) {
+          await this.login();
+          currentOptions = {
+            ...currentOptions,
+            headers: {
+              ...(currentOptions.headers as any),
+              ...this.getAuthHeaders()
+            }
+          };
+          continue;
+        }
+
+        // Retry on transient gateway/server errors (502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout, 500)
+        if (res.status === 502 || res.status === 503 || res.status === 504 || res.status === 500) {
+          if (attempt < maxRetries) {
+            const delay = initialDelayMs * Math.pow(2, attempt - 1);
+            console.warn(`[SwitchClient] Transient gateway error (${res.status}) on ${url}. Retrying in ${delay}ms (attempt ${attempt}/${maxRetries})...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+
+        return res;
+      } catch (err: any) {
+        lastError = err;
+        if (attempt < maxRetries) {
+          const delay = initialDelayMs * Math.pow(2, attempt - 1);
+          console.warn(`[SwitchClient] Network connection issue (${err?.message || err}) on ${url}. Retrying in ${delay}ms (attempt ${attempt}/${maxRetries})...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
+    throw new Error(`Failed to complete request to ${url} after ${maxRetries} attempts.`);
   }
 
   /**
    * Authenticate with Switch Gateway and acquire session cookie / token.
    */
   public async login(): Promise<string> {
-    const res = await fetch(`${this.apiUrl}/auth/login`, {
+    const res = await this.fetchWithRetry(`${this.apiUrl}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -66,7 +145,7 @@ export class SwitchClient {
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Switch login failed (${res.status}): ${errText}`);
+      throw new Error(`Switch login failed (${res.status}): ${cleanHttpErrorMessage(res.status, errText)}`);
     }
 
     const setCookie = res.headers.get('set-cookie');
@@ -122,7 +201,7 @@ export class SwitchClient {
       ]
     };
 
-    let res = await fetch(`${this.apiUrl}/rooms`, {
+    const res = await this.fetchWithRetry(`${this.apiUrl}/rooms`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -131,21 +210,9 @@ export class SwitchClient {
       body: JSON.stringify(roomPayload)
     });
 
-    if (res.status === 401) {
-      await this.login();
-      res = await fetch(`${this.apiUrl}/rooms`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...this.getAuthHeaders()
-        },
-        body: JSON.stringify(roomPayload)
-      });
-    }
-
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Failed to create Switch room for ${reportCode} (${res.status}): ${errText}`);
+      throw new Error(`Failed to create Switch room for ${reportCode} (${res.status}): ${cleanHttpErrorMessage(res.status, errText)}`);
     }
 
     const roomData = (await res.json()) as any;
@@ -153,7 +220,7 @@ export class SwitchClient {
 
     // Add admin user as a chat member so messages can be posted
     if (this.adminUserId) {
-      await fetch(`${this.apiUrl}/chats/${roomId}/members`, {
+      await this.fetchWithRetry(`${this.apiUrl}/chats/${roomId}/members`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -187,7 +254,7 @@ export class SwitchClient {
       payload.mention_agent_id = mentionAgentId;
     }
 
-    let res = await fetch(`${this.apiUrl}/chats/${roomId}/messages`, {
+    const res = await this.fetchWithRetry(`${this.apiUrl}/chats/${roomId}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -196,21 +263,9 @@ export class SwitchClient {
       body: JSON.stringify(payload)
     });
 
-    if (res.status === 401) {
-      await this.login();
-      res = await fetch(`${this.apiUrl}/chats/${roomId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...this.getAuthHeaders()
-        },
-        body: JSON.stringify(payload)
-      });
-    }
-
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Failed to post message to Switch room ${roomId} (${res.status}): ${errText}`);
+      throw new Error(`Failed to post message to Switch room ${roomId} (${res.status}): ${cleanHttpErrorMessage(res.status, errText)}`);
     }
 
     const data = (await res.json()) as any;
@@ -251,6 +306,11 @@ export class SwitchClient {
           headers: this.getAuthHeaders()
         });
 
+        if (actRes.status === 401) {
+          await this.login().catch(() => {});
+          continue;
+        }
+
         if (actRes.ok) {
           const actData = (await actRes.json()) as any;
           const items = Array.isArray(actData?.items) ? actData.items : [];
@@ -279,6 +339,11 @@ export class SwitchClient {
         const res = await fetch(`${this.apiUrl}/chats/${roomId}/messages?limit=25`, {
           headers: this.getAuthHeaders()
         });
+
+        if (res.status === 401) {
+          await this.login().catch(() => {});
+          continue;
+        }
 
         if (!res.ok) {
           continue;
