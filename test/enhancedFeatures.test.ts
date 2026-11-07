@@ -4,7 +4,8 @@ import { Database } from '../src/db/database.js';
 import {
   buildResolvedActionContainer,
   buildThreadQAContainer,
-  buildThreadQAProgressContainer
+  buildThreadQAProgressContainer,
+  stripAgentMentions
 } from '../src/discord/components/investigationContainerBuilder.js';
 
 describe('Enhanced Features: Thread QA, In-Place Resolution, and User History', () => {
@@ -121,22 +122,112 @@ describe('Enhanced Features: Thread QA, In-Place Resolution, and User History', 
     assert.ok(textComp.content.includes('mod-admin'));
   });
 
-  test('buildThreadQAProgressContainer and buildThreadQAContainer render properly', () => {
-    const progress = buildThreadQAProgressContainer('investigator', 'mod-123', 'Is the user an alt account?');
+  test('buildThreadQAProgressContainer and buildThreadQAContainer render properly and strip agent mentions', () => {
+    const rawQuestion = '@report-investigator did anyone provoke them first?';
+    const progress = buildThreadQAProgressContainer('report-investigator', 'mod-123', rawQuestion);
     assert.ok(progress.components);
     assert.equal(progress.components[0].type, 17);
+    const progressText = progress.components[0].components[0].content;
+    // Inquiry heading should mention the agent
+    assert.ok(progressText.includes('### 💬 Moderator Inquiry: `@report-investigator`'));
+    // Question text should NOT contain @report-investigator
+    assert.ok(progressText.includes('> **Question from <@mod-123>:**\n> Did anyone provoke them first?'));
+    assert.ok(!progressText.includes('> @report-investigator'));
 
     const answered = buildThreadQAContainer(
       'V-100',
-      'investigator',
-      'Is the user an alt account?',
-      'Analysis indicates 98% correlation with known sockpuppet cluster.',
+      'report-investigator',
+      rawQuestion,
+      'No provocation was detected in message logs.',
       'mod-123'
     );
     assert.ok(answered.components);
     const textComp = answered.components[0].components[0];
     assert.equal(textComp.type, 10);
-    assert.ok(textComp.content.includes('Is the user an alt account?'));
-    assert.ok(textComp.content.includes('sockpuppet cluster'));
+    // Inquiry heading should mention the agent and report code
+    assert.ok(textComp.content.includes('### 💬 Moderator Inquiry: `@report-investigator` • Report `V-100`'));
+    // Question text should NOT contain @report-investigator
+    assert.ok(textComp.content.includes('> **Question from <@mod-123>:**\n> Did anyone provoke them first?'));
+    assert.ok(!textComp.content.includes('> @report-investigator'));
+    assert.ok(textComp.content.includes('No provocation was detected'));
+  });
+
+  test('stripAgentMentions removes agent mentions and cleans punctuation and capitalization', () => {
+    // User exact example
+    assert.equal(
+      stripAgentMentions('@report-investigator did anyone provoke them first?'),
+      'Did anyone provoke them first?'
+    );
+
+    // With colon / comma / hyphen after mention
+    assert.equal(
+      stripAgentMentions('@report-investigator: did anyone provoke them first?'),
+      'Did anyone provoke them first?'
+    );
+    assert.equal(
+      stripAgentMentions('@investigator, did anyone provoke them first?'),
+      'Did anyone provoke them first?'
+    );
+    assert.equal(
+      stripAgentMentions('@report-triage - what is the severity?'),
+      'What is the severity?'
+    );
+
+    // Other agents
+    assert.equal(
+      stripAgentMentions('@moderation-advisor what do you recommend?'),
+      'What do you recommend?'
+    );
+    assert.equal(
+      stripAgentMentions('@advisor why was this flagged?'),
+      'Why was this flagged?'
+    );
+
+    // Trailing mention
+    assert.equal(
+      stripAgentMentions('did anyone provoke them first, @report-investigator?'),
+      'Did anyone provoke them first?'
+    );
+    assert.equal(
+      stripAgentMentions('did anyone provoke them first @report-investigator?'),
+      'Did anyone provoke them first?'
+    );
+  });
+
+  test('stripAgentMentions preserves legitimate user mentions and normal words', () => {
+    // Legitimate user mention preserved
+    assert.equal(
+      stripAgentMentions('@report-investigator did @ace provoke them first?'),
+      'Did @ace provoke them first?'
+    );
+    assert.equal(
+      stripAgentMentions('@advisor did <@1241770510321451165> violate rule 3?'),
+      'Did <@1241770510321451165> violate rule 3?'
+    );
+    assert.equal(
+      stripAgentMentions('did @bob or @charlie provoke them?'),
+      'Did @bob or @charlie provoke them?'
+    );
+
+    // Normal usage of word "investigator" or "advisor" without @ prefix
+    assert.equal(
+      stripAgentMentions('Did the investigator review all message logs?'),
+      'Did the investigator review all message logs?'
+    );
+    assert.equal(
+      stripAgentMentions('What did the advisor recommend?'),
+      'What did the advisor recommend?'
+    );
+  });
+
+  test('stripAgentMentions handles bot id and bot username mentions', () => {
+    assert.equal(
+      stripAgentMentions('<@123456789> why was this user reported?', '123456789', 'Verity'),
+      'Why was this user reported?'
+    );
+    assert.equal(
+      stripAgentMentions('@Verity why was this user reported?', '123456789', 'Verity'),
+      'Why was this user reported?'
+    );
   });
 });

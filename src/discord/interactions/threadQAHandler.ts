@@ -3,8 +3,11 @@ import { db } from '../../db/database.js';
 import { switchClient } from '../../switch/switchClient.js';
 import {
   buildThreadQAContainer,
-  buildThreadQAProgressContainer
+  buildThreadQAProgressContainer,
+  stripAgentMentions
 } from '../components/investigationContainerBuilder.js';
+
+export { stripAgentMentions };
 
 export async function handleThreadMessage(message: Message): Promise<void> {
   // Ignore bots and non-guild messages
@@ -71,8 +74,15 @@ export async function handleThreadMessage(message: Message): Promise<void> {
   // Send typing indicator
   await message.channel.sendTyping().catch(() => {});
 
+  // Strip agent mentions so they only appear in the inquiry heading, not the question text
+  const cleanQuestion = stripAgentMentions(
+    message.cleanContent,
+    botId,
+    message.client.user?.username
+  );
+
   // Post progress container
-  const progressPayload = buildThreadQAProgressContainer(agentName, message.author.id, message.cleanContent);
+  const progressPayload = buildThreadQAProgressContainer(agentName, message.author.id, cleanQuestion);
   let progressMsg: any = null;
 
   try {
@@ -95,7 +105,7 @@ export async function handleThreadMessage(message: Message): Promise<void> {
 
     const prompt =
       `@${agentName} A human moderator (<@${message.author.id}>) asked the following question regarding Report ${report.reportCode}:\n\n` +
-      `"${message.cleanContent}"\n\n` +
+      `"${cleanQuestion}"\n\n` +
       `CASE CONTEXT:\n` +
       `- Target Member: <@${report.reportedUserId}> (${report.reportedUserId})\n` +
       `- Alleged Violation: ${report.reason}\n\n` +
@@ -118,13 +128,13 @@ export async function handleThreadMessage(message: Message): Promise<void> {
       reportId: report.id,
       phase: `Q&A: ${agentName}`,
       agentName,
-      content: `Question from <@${message.author.id}>: "${message.cleanContent}"\n\nAnswer: ${response}`
+      content: `Question from <@${message.author.id}>: "${cleanQuestion}"\n\nAnswer: ${response}`
     });
 
     const qaPayload = buildThreadQAContainer(
       report.reportCode,
       agentName,
-      message.cleanContent,
+      cleanQuestion,
       response,
       message.author.id
     );
@@ -135,7 +145,7 @@ export async function handleThreadMessage(message: Message): Promise<void> {
         components: qaPayload.components
       }).catch(async () => {
         await message.channel.send({
-          content: `### 💬 Moderator Inquiry: \`@${agentName}\` • Report \`${report.reportCode}\`\n> **Q:** ${message.cleanContent}\n\n${response}`
+          content: `### 💬 Moderator Inquiry: \`@${agentName}\` • Report \`${report.reportCode}\`\n> **Q:** ${cleanQuestion}\n\n${response}`
         });
       });
     }

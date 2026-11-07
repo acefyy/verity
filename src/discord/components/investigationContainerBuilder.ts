@@ -185,6 +185,43 @@ export function buildResolvedActionContainer(params: {
 }
 
 /**
+ * Strips agent or bot mentions from moderator inquiry question text,
+ * ensuring agent pings appear only in the header container, not within the question.
+ * Preserves all legitimate member mentions (e.g. @user, <@123456789>).
+ */
+export function stripAgentMentions(
+  rawContent: string,
+  botId?: string,
+  botUsername?: string
+): string {
+  if (!rawContent) return '';
+
+  let cleaned = rawContent;
+
+  if (botId) {
+    cleaned = cleaned.replace(new RegExp(`<@!?${botId}>`, 'g'), '');
+  }
+
+  if (botUsername) {
+    const escapedName = botUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(`@${escapedName}\\b`, 'gi'), '');
+  }
+
+  const agentRegex = /@(report-investigator|report-triage|moderation-advisor|investigator|triage|advisor|verity)\b/gi;
+  cleaned = cleaned.replace(agentRegex, '');
+
+  cleaned = cleaned.replace(/^[\s,:-]+/, '');
+  cleaned = cleaned.replace(/\s*[,:]?\s*([?.!]|$)/g, '$1');
+  cleaned = cleaned.replace(/[ \t]{2,}/g, ' ').trim();
+
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  return cleaned || rawContent.trim();
+}
+
+/**
  * Components V2 container for live moderator inquiry Q&A in the investigation thread.
  */
 export function buildThreadQAContainer(
@@ -194,6 +231,7 @@ export function buildThreadQAContainer(
   answer: string,
   moderatorId: string
 ) {
+  const cleanQuestion = stripAgentMentions(question);
   return {
     flags: IS_COMPONENTS_V2,
     components: [
@@ -204,7 +242,7 @@ export function buildThreadQAContainer(
             type: 10, // Text Display
             content: `### 💬 Moderator Inquiry: \`@${agentName}\` • Report \`${reportCode}\`\n\n` +
               `> **Question from <@${moderatorId}>:**\n` +
-              `> ${question.replace(/\n/g, '\n> ')}\n\n` +
+              `> ${cleanQuestion.replace(/\n/g, '\n> ')}\n\n` +
               `${sanitizeContent(answer)}\n\n` +
               `*Answered by Switch Agent \`${agentName}\`*`
           }
@@ -222,6 +260,7 @@ export function buildThreadQAProgressContainer(
   moderatorId: string,
   question: string
 ) {
+  const cleanQuestion = stripAgentMentions(question);
   return {
     flags: IS_COMPONENTS_V2,
     components: [
@@ -232,7 +271,7 @@ export function buildThreadQAProgressContainer(
             type: 10, // Text Display
             content: `### 💬 Moderator Inquiry: \`@${agentName}\`\n\n` +
               `> **Question from <@${moderatorId}>:**\n` +
-              `> ${question.replace(/\n/g, '\n> ')}\n\n` +
+              `> ${cleanQuestion.replace(/\n/g, '\n> ')}\n\n` +
               `⏳ **@${agentName} is reviewing case history and formulating an answer...**`
           }
         ]
